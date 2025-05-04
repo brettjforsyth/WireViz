@@ -87,7 +87,11 @@ class Harness:
             if ph is None:  # This must therefore be a test for None!
                 ph = self.tweak.placeholder  # Use the global placeholder
             # Create function rph() to replace any placeholder with node name
-            rph = (lambda s: s.replace(ph, node.name)) if ph else lambda s: s
+            rph = (
+                (lambda s: s.replace(ph, node.name) if isinstance(s, str) else s)
+                if ph
+                else lambda s: s  # No-change-lambda if no placeholder
+            )
             n_override = node.tweak.override or {}
             s_override = self.tweak.override or {}
             for id, n_dict in n_override.items():
