@@ -101,7 +101,8 @@ class Harness:
                     k, v = rph(k), rph(v)
                     if k in s_dict and v != s_dict[k]:
                         raise ValueError(
-                            f"{node.name}.tweak.override.{id}.{k} conflicts with another"
+                            f"{node.name}.tweak.override.{id}.{k}={v!r} conflicts"
+                            f" with tweak.override.{id}.{k}={s_dict[k]!r}"
                         )
                     s_dict[k] = v
                 s_override[id] = s_dict or None  # Will never be None?
