@@ -105,7 +105,7 @@ class Harness:
                             f" with tweak.override.{id}.{k}={s_dict[k]!r}"
                         )
                     s_dict[k] = v
-                s_override[id] = s_dict or None  # Will never be None?
+                s_override[id] = s_dict  # Never empty, because nothing deleted
             self.tweak.override = s_override or None
             self.tweak.append = (
                 make_list(self.tweak.append)
