@@ -22,7 +22,7 @@ from wireviz.wv_sourcing import (
     sourced_to_csv,
 )
 from wireviz.wv_svg import export_json, render_svg
-from wireviz.wv_viewer import render_html
+from wireviz.wv_viewer import render_html, render_html_3d
 
 format_codes = {
     # "c": "csv",
@@ -101,6 +101,13 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Write a self-contained interactive HTML viewer (<name>.viewer.html).",
 )
 @click.option(
+    "--viewer3d",
+    is_flag=True,
+    default=False,
+    help="Write an interactive 3D viewer (<name>.viewer3d.html; needs internet "
+    "for three.js).",
+)
+@click.option(
     "--json",
     "json_out",
     is_flag=True,
@@ -139,6 +146,7 @@ def wireviz(
     strict,
     grid,
     viewer,
+    viewer3d,
     json_out,
     cutsheet,
     source,
@@ -268,6 +276,12 @@ def wireviz(
             out = output_base.with_suffix(".viewer.html")
             out.write_text(render_html(harness))
             print("Viewer:      ", out)
+
+        # Interactive 3D viewer (three.js from CDN)
+        if viewer3d:
+            out = output_base.with_suffix(".viewer3d.html")
+            out.write_text(render_html_3d(harness))
+            print("3D viewer:   ", out)
 
         # Layout JSON
         if json_out:

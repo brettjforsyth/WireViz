@@ -9,7 +9,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from wireviz import wireviz  # noqa: E402
-from wireviz.wv_viewer import render_html  # noqa: E402
+from wireviz.wv_viewer import render_html, render_html_3d  # noqa: E402
 
 BASIC = """
 metadata:
@@ -63,6 +63,24 @@ def test_all_examples_produce_viewers():
         for y in sorted((REPO_ROOT / subdir).glob("*.yml")):
             h = wireviz.parse(str(y), return_types="harness")
             html = render_html(h)
+            assert html.count("<!doctype html>") == 1
+
+
+def test_3d_viewer_structure():
+    html = render_html_3d(harness_of(BASIC))
+    assert html.lstrip().lower().startswith("<!doctype html>")
+    assert "three.min.js" in html  # three.js include
+    assert "OrbitControls" in html  # orbit controls
+    assert "const DATA =" in html  # embedded layout
+    assert "WebGLRenderer" in html  # scene builder
+    assert "My Test Harness" in html
+
+
+def test_3d_viewer_all_examples():
+    for subdir in ("examples", "tutorial"):
+        for y in sorted((REPO_ROOT / subdir).glob("*.yml")):
+            h = wireviz.parse(str(y), return_types="harness")
+            html = render_html_3d(h)
             assert html.count("<!doctype html>") == 1
 
 
