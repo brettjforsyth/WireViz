@@ -21,7 +21,8 @@ from wireviz.wv_sourcing import (
     enrich_bom,
     sourced_to_csv,
 )
-from wireviz.wv_svg import render_svg
+from wireviz.wv_svg import export_json, render_svg
+from wireviz.wv_viewer import render_html
 
 format_codes = {
     # "c": "csv",
@@ -94,6 +95,19 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Also write a native grid-snapped SVG (<name>.grid.svg).",
 )
 @click.option(
+    "--viewer",
+    is_flag=True,
+    default=False,
+    help="Write a self-contained interactive HTML viewer (<name>.viewer.html).",
+)
+@click.option(
+    "--json",
+    "json_out",
+    is_flag=True,
+    default=False,
+    help="Write the harness layout as JSON (<name>.layout.json).",
+)
+@click.option(
     "--cutsheet",
     "cutsheet",
     default=None,
@@ -124,6 +138,8 @@ def wireviz(
     drc,
     strict,
     grid,
+    viewer,
+    json_out,
     cutsheet,
     source,
     version,
@@ -246,6 +262,18 @@ def wireviz(
             out = output_base.with_suffix(".grid.svg")
             out.write_text(render_svg(harness))
             print("Grid SVG:    ", out)
+
+        # Interactive HTML viewer (self-contained)
+        if viewer:
+            out = output_base.with_suffix(".viewer.html")
+            out.write_text(render_html(harness))
+            print("Viewer:      ", out)
+
+        # Layout JSON
+        if json_out:
+            out = output_base.with_suffix(".layout.json")
+            out.write_text(export_json(harness))
+            print("Layout JSON: ", out)
 
         # Standard Graphviz-backed outputs last (these need the `dot` binary)
         if output_formats:

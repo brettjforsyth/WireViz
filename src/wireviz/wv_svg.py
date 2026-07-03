@@ -298,11 +298,14 @@ def _node_svg(node: dict, cfg: GridConfig) -> str:
 def _wire_svg(wire: dict) -> str:
     pts = " ".join(f"{px},{py}" for px, py in wire["points"])
     color = wire["color"] or "#000000"
+    key = escape(f"{wire['cable']}:{wire['wire']}")
     # dark casing underneath so light-coloured wires stay visible on any bg
     return (
-        f'<polyline points="{pts}" fill="none" stroke="#222" stroke-width="3.5" '
+        f'<polyline class="wire" data-wire="{key}" points="{pts}" fill="none" '
+        f'stroke="#222" stroke-width="3.5" '
         f'stroke-linejoin="round" stroke-linecap="round"/>'
-        f'<polyline points="{pts}" fill="none" stroke="{color}" '
+        f'<polyline class="wire-core" data-wire="{key}" points="{pts}" '
+        f'fill="none" stroke="{color}" '
         f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
     )
 
