@@ -19,6 +19,7 @@ The intermediate :func:`build_layout` result is a plain dict, which doubles as
 the JSON feed for the 3D/interactive viewer.
 """
 
+import json
 from dataclasses import dataclass, field
 from html import escape
 from typing import Dict, List, Optional, Tuple
@@ -37,6 +38,7 @@ class GridConfig:
     col_gap: int = 120  # horizontal gap between columns
     node_gap: int = 40  # vertical gap between stacked nodes in a column
     margin: int = 40
+    image_band: int = 90  # vertical space reserved for a component image
     show_grid: bool = True
 
     def snap(self, v: float) -> int:
@@ -100,6 +102,15 @@ def _node_pins(harness, name) -> List[Tuple[object, str]]:
     return rows
 
 
+def _node_image(harness, name) -> Optional[str]:
+    """Return a connector's image src, if it has one."""
+    conn = harness.connectors.get(name)
+    if conn is not None and getattr(conn, "image", None):
+        src = getattr(conn.image, "src", None)
+        return str(src) if src is not None else None
+    return None
+
+
 def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
     """Compute a grid-snapped layout dict (also the JSON feed for 3D)."""
     cfg = config or GridConfig()
@@ -119,15 +130,20 @@ def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
         col_width = cfg.node_width
         for name in columns[col]:
             pins = _node_pins(harness, name)
+            image = _node_image(harness, name)
             height = cfg.header + max(len(pins), 1) * cfg.pin_pitch
+            if image:
+                height += cfg.image_band
             x = cfg.snap(col_x)
             y = cfg.snap(y)
             kind = "connector" if name in harness.connectors else "cable"
             pin_rows = []
             for i, (pid, label) in enumerate(pins):
-                py = cfg.snap(y + cfg.header + i * cfg.pin_pitch + cfg.pin_pitch // 2)
+                py = cfg.snap(
+                    y + cfg.header + i * cfg.pin_pitch + cfg.pin_pitch // 2
+                )
                 pin_rows.append({"id": pid, "label": label, "y": py})
-            nodes[name] = {
+            node = {
                 "name": name,
                 "kind": kind,
                 "x": x,
@@ -137,6 +153,12 @@ def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
                 "column": col,
                 "pins": pin_rows,
             }
+            if image:
+                node["image"] = {
+                    "src": image,
+                    "y": cfg.snap(y + cfg.header + len(pins) * cfg.pin_pitch),
+                }
+            nodes[name] = node
             y = y + height + cfg.node_gap
             max_bottom = max(max_bottom, y)
         col_x = col_x + col_width + cfg.col_gap
@@ -259,6 +281,16 @@ def _node_svg(node: dict, cfg: GridConfig) -> str:
             f'<circle cx="{x}" cy="{py}" r="2" fill="#333"/>'
             f'<circle cx="{x + w}" cy="{py}" r="2" fill="#333"/>'
         )
+    image = node.get("image")
+    if image:
+        iy = image["y"]
+        ih = cfg.image_band - 10
+        parts.append(
+            f'<image href="{escape(str(image["src"]))}" '
+            f'xlink:href="{escape(str(image["src"]))}" '
+            f'x="{x + 5}" y="{iy}" width="{w - 10}" height="{ih}" '
+            f'preserveAspectRatio="xMidYMid meet"/>'
+        )
     parts.append("</g>")
     return "".join(parts)
 
@@ -281,8 +313,9 @@ def render_svg(harness, config: Optional[GridConfig] = None) -> str:
     layout = build_layout(harness, cfg)
     w, h = layout["width"], layout["height"]
     body = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
-        f'viewBox="0 0 {w} {h}">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'xmlns:xlink="http://www.w3.org/1999/xlink" '
+        f'width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
         _svg_grid(w, h, cfg),
         '<g class="wires">',
         *[_wire_svg(wire) for wire in layout["wires"]],
@@ -293,3 +326,19 @@ def render_svg(harness, config: Optional[GridConfig] = None) -> str:
         "</svg>",
     ]
     return "\n".join(body) + "\n"
+
+
+def export_json(harness, config: Optional[GridConfig] = None, indent: int = 2) -> str:
+    """Serialize the grid layout plus harness metadata to JSON.
+
+    This is the machine-readable feed for the interactive/3D viewer and for
+    interop; it is intentionally renderer-neutral (positions + connectivity +
+    per-component metadata), not tied to the SVG output.
+    """
+    layout = build_layout(harness, config)
+    meta = {
+        "title": harness.metadata.get("title") if harness.metadata else None,
+        "connectors": len(harness.connectors),
+        "cables": len(harness.cables),
+    }
+    return json.dumps({"metadata": meta, **layout}, indent=indent)

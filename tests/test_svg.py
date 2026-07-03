@@ -116,6 +116,49 @@ def test_layout_dict_is_json_serializable():
     json.dumps(lay)  # must not raise
 
 
+IMAGED = """
+connectors:
+  X1:
+    pincount: 1
+    image:
+      src: resources/does-not-need-to-exist.png
+  X2: {pincount: 1}
+cables:
+  W1: {wirecount: 1}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+
+
+def test_connector_image_rendered():
+    svg = render_svg(harness_of(IMAGED))
+    assert "<image " in svg
+    ET.fromstring(svg)  # still valid XML with the image element
+
+
+def test_image_metadata_in_layout():
+    lay = build_layout(harness_of(IMAGED))
+    assert "image" in lay["nodes"]["X1"]
+    assert lay["nodes"]["X1"]["image"]["src"].endswith(".png")
+    # a node with an image is taller than one without
+    assert lay["nodes"]["X1"]["h"] > lay["nodes"]["X2"]["h"]
+
+
+def test_export_json_is_valid():
+    import json
+
+    from wireviz.wv_svg import export_json
+
+    data = json.loads(export_json(harness_of(IMAGED)))
+    assert data["metadata"]["connectors"] == 2
+    assert "nodes" in data and "wires" in data
+    # image src is a plain string, not a Path
+    assert isinstance(data["nodes"]["X1"]["image"]["src"], str)
+
+
 if __name__ == "__main__":
     import traceback
 
