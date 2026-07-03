@@ -1,7 +1,20 @@
 # Rendering roadmap: grid-snapped wires + 2D/3D components
 
-Status: **proposal, awaiting approval** (no feature code written yet).
-Author: architecture audit, 2026-07-03.
+Status: **in progress — core delivered.** Author: architecture audit, 2026-07-03.
+
+**What shipped (2026-07-03):** rather than the Graphviz-post-process approach
+originally sketched below (Phase 1), a **native model-driven SVG renderer**
+(`wireviz/wv_svg.py`) was built — it does its own layered grid layout, snaps
+every coordinate to a configurable pitch, routes wires as orthogonal grid-aligned
+polylines, and renders 2D component images. It has no `dot` dependency. This
+went straight to the Phase-2 architecture (the only path to 2D/3D) and made
+Phase 1's Graphviz-geometry post-processing unnecessary. A self-contained
+interactive HTML viewer (`wv_viewer.py`, pan/zoom/grid/hover) and a JSON layout
+export (`export_json`) are also done. Remaining: a true three.js 3D view, a
+proper channel router to guarantee zero wire overlap on dense harnesses, and
+per-pin footprint anchor coordinates.
+
+See [FEATURES.md](FEATURES.md) for how to use everything shipped so far.
 
 Goal: add (a) **grid-snapped orthogonal wire routing** and (b) **2D — and later
 3D — renderings of real components** (connector footprints/photos with wires
@@ -39,13 +52,11 @@ Two facts make this tractable:
 
 - [x] Golden-master regression tests over all 27 example/tutorial `.gv` outputs
       (`tests/test_examples_golden.py`). This is the guardrail for everything below.
-- [ ] Add a JSON serializer for the `Harness` model (`asdict`-based; the
-      dataclasses are already `asdict`-friendly and `wv_bom.py` uses `asdict`).
-      Emit connectors, cables, `Connection` records, mates, options, and the BOM
-      (`harness.bom()`). This is the single feed for both the grid router and the
-      2D/3D renderers, and is independently useful (machine-readable harness export).
-- [ ] Extract the model-iteration in `create_graph()` from its string-emission so
-      a renderer interface exists and Graphviz becomes one backend among several.
+- [x] JSON layout export (`wv_svg.export_json`) — nodes, pin coordinates, routed
+      wires, per-component metadata; the single feed for the viewer and 3D.
+- [x] Renderer decoupled from Graphviz entirely via a native renderer, rather
+      than extracting `create_graph()`; Graphviz remains available as the legacy
+      backend and the golden `.gv` output is unchanged.
 
 ### Phase 1 — Grid-snapped orthogonal wires  *(weeks; keeps upstream compat)*
 

@@ -32,6 +32,14 @@ WireViz is a tool for easily documenting cables, wiring harnesses and connector 
 * Allows for easy-autorouting for 1-to-1 wiring
 * Generates BOM (Bill of Materials)
 
+### Fork extensions
+
+This fork adds harness engineering, manufacturing, sourcing, and rendering
+features — design-rule checking (including ampacity and voltage drop), wire cut
+sheets, live DigiKey/Mouser BOM pricing, a native grid-snapped SVG renderer with
+2D component images, and a self-contained interactive HTML viewer. See
+[docs/FEATURES.md](FEATURES.md).
+
 _Note_: WireViz is not designed to represent the complete wiring of a system. Its main aim is to document the construction of individual wires and harnesses.
 
 

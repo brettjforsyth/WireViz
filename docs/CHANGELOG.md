@@ -1,5 +1,31 @@
 # Change Log
 
+## [Unreleased] (fork)
+
+### New engineering & manufacturing features
+
+- Design-rule checking (`wv_drc`): structural checks (unknown/out-of-range
+  pins and wires, shield-on-unshielded, dangling wires, label mismatches) plus
+  electrical checks — ampacity and voltage drop (`wv_electrical`). CLI `--drc`
+  / `--strict`.
+- Wire cut sheets (`wv_cutsheet`) with manufacturing cut-length math
+  (insertion/slack allowances, twist factor, rounding to stock increments) and
+  bulk length totals. CLI `--cutsheet tsv|csv|html`.
+- BOM distributor sourcing (`wv_sourcing`) — live DigiKey and Mouser pricing,
+  stock, and links, with caching and graceful offline degrade. CLI
+  `--source digikey|mouser`.
+- Native grid-snapped SVG renderer (`wv_svg`) — layered grid layout, orthogonal
+  grid-aligned wires, 2D component images; no Graphviz dependency. CLI `--grid`.
+- Interactive, self-contained HTML viewer (`wv_viewer`) with pan/zoom/grid/hover;
+  JSON layout export. CLI `--viewer` / `--json`.
+
+### Maintenance
+
+- Merged upstream fixes (#498, #495, #496, #443, #473, #357) and the
+  v0.4.2-rc release branch; fixed a loop-connector double-count regression.
+- Added the project's first test suite (`tests/`), including golden-master
+  snapshots of all bundled example `.gv` outputs.
+
 ## [0.4.1] (2024-07-13)
 
 ### Improvements to help reported issues
