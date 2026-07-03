@@ -319,6 +319,8 @@ class Cable:
     show_equiv: bool = False
     length: float = 0
     length_unit: Optional[str] = None
+    current: Optional[float] = None  # amps carried by each wire (for DRC/ampacity)
+    voltage: Optional[float] = None  # nominal circuit voltage (for %-voltage-drop)
     color: Optional[Color] = None
     wirecount: Optional[int] = None
     shield: Union[bool, Color] = False

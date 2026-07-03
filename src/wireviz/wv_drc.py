@@ -19,6 +19,12 @@ from enum import IntEnum
 from typing import Callable, Dict, List, Optional
 
 from wireviz.DataClasses import MateComponent, MatePin
+from wireviz.wv_electrical import ampacity_for, ampacity_margin, voltage_drop
+
+# Warn when a wire's current exceeds this fraction of its ampacity.
+AMPACITY_WARN_FRACTION = 0.9
+# Warn when voltage drop exceeds this percentage of the circuit voltage.
+DEFAULT_VDROP_PCT = 5.0
 
 
 class Severity(IntEnum):
@@ -298,6 +304,66 @@ def _missing_part_number(harness):
                     f"looked up at a distributor",
                     comp.name,
                 )
+
+
+@rule("E-AMPACITY")
+def _ampacity_exceeded(harness):
+    """A wire carries more current than its gauge's ampacity allows.
+
+    Only active when the cable declares a `current`; conservative chassis-
+    wiring ampacity is used unless the user overrides the table upstream.
+    """
+    for cable in harness.cables.values():
+        if not cable.current or not cable.gauge:
+            continue
+        margin = ampacity_margin(cable.current, cable.gauge, cable.gauge_unit)
+        amp = ampacity_for(cable.gauge, cable.gauge_unit)
+        if margin is None or amp is None:
+            continue
+        if margin > 1.0:
+            yield DRCFinding(
+                Severity.ERROR,
+                "E-AMPACITY",
+                f"cable {cable.name} carries {cable.current} A on "
+                f"{cable.gauge} {cable.gauge_unit or ''}".rstrip()
+                + f" wire, above its ~{amp} A ampacity",
+                cable.name,
+            )
+        elif margin >= AMPACITY_WARN_FRACTION:
+            yield DRCFinding(
+                Severity.WARNING,
+                "W-AMPACITY-MARGIN",
+                f"cable {cable.name} carries {cable.current} A, within "
+                f"{round(margin * 100)}% of its ~{amp} A ampacity",
+                cable.name,
+            )
+
+
+@rule("W-VDROP")
+def _voltage_drop(harness):
+    """Voltage drop over a wire exceeds the allowed percentage of circuit voltage.
+
+    Only active when the cable declares both `current` and `voltage`.
+    """
+    for cable in harness.cables.values():
+        if not (cable.current and cable.voltage and cable.gauge and cable.length):
+            continue
+        drop = voltage_drop(
+            cable.current, cable.gauge, cable.gauge_unit, float(cable.length)
+        )
+        if drop is None:
+            continue
+        pct = drop / cable.voltage * 100
+        if pct > DEFAULT_VDROP_PCT:
+            yield DRCFinding(
+                Severity.WARNING,
+                "W-VDROP",
+                f"cable {cable.name} drops {drop:.2f} V "
+                f"({pct:.1f}% of {cable.voltage} V) over {cable.length} "
+                f"{cable.length_unit or 'm'}, above the "
+                f"{DEFAULT_VDROP_PCT:.0f}% limit",
+                cable.name,
+            )
 
 
 # --- runner ----------------------------------------------------------------
