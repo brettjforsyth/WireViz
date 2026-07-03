@@ -378,3 +378,54 @@ def total_cost(lines: List[SourcedLine]) -> Optional[float]:
     """Sum extended prices; None if nothing could be priced."""
     priced = [ln.extended_price for ln in lines if ln.extended_price is not None]
     return round(sum(priced), 4) if priced else None
+
+
+SOURCED_COLUMNS = [
+    "designators",
+    "description",
+    "mpn",
+    "qty",
+    "distributor",
+    "distributor_pn",
+    "stock",
+    "lifecycle",
+    "unit_price",
+    "extended_price",
+    "product_url",
+]
+
+
+def _row_designators(row: dict) -> str:
+    d = row.get("designators") or row.get("Designators") or ""
+    return ", ".join(map(str, d)) if isinstance(d, (list, tuple)) else str(d)
+
+
+def sourced_to_csv(lines: List[SourcedLine]) -> str:
+    """Render enriched BOM lines to a distributor-costed CSV."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(SOURCED_COLUMNS)
+    for ln in lines:
+        info = ln.info
+        w.writerow(
+            [
+                _row_designators(ln.row),
+                ln.row.get("description", ""),
+                ln.mpn or "",
+                ln.qty,
+                (info.distributor if info else "") or "",
+                (info.distributor_pn if info else "") or "",
+                (info.stock if info else "") if info else "",
+                (info.lifecycle if info else "") or "" if info else "",
+                ln.unit_price if ln.unit_price is not None else "",
+                ln.extended_price if ln.extended_price is not None else "",
+                (info.product_url if info else "") or "",
+            ]
+        )
+    grand = total_cost(lines)
+    if grand is not None:
+        w.writerow([""] * (len(SOURCED_COLUMNS) - 1) + [grand])
+    return buf.getvalue()
