@@ -116,15 +116,16 @@ def test_layout_dict_is_json_serializable():
     json.dumps(lay)  # must not raise
 
 
-IMAGED = """
+_RESOURCE = REPO_ROOT / "examples" / "resources" / "stereo-phone-plug-TRS.png"
+IMAGED = f"""
 connectors:
   X1:
     pincount: 1
     image:
-      src: resources/does-not-need-to-exist.png
-  X2: {pincount: 1}
+      src: {_RESOURCE}
+  X2: {{pincount: 1}}
 cables:
-  W1: {wirecount: 1}
+  W1: {{wirecount: 1}}
 connections:
   -
     - X1: [1]
