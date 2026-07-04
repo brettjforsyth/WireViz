@@ -22,6 +22,7 @@ from wireviz.wv_dossier import render_dossier
 from wireviz.wv_dxf import formboard_to_dxf
 from wireviz.wv_markers import build_markers, to_csv as markers_csv, to_svg_sheet
 from wireviz.wv_nets import compute_nets, to_text as nets_text
+from wireviz.wv_pinout import to_html as pinout_html
 from wireviz.wv_weight import weight_report
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
 from wireviz.wv_formboard import PAGE_SIZES, FormboardConfig, page_grid, build_formboard, render_formboard
@@ -182,6 +183,10 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Write a self-contained HTML build dossier (<name>.dossier.html).",
 )
 @click.option(
+    "--pinout", is_flag=True, default=False,
+    help="Write per-connector pinout cards (<name>.pinout.html).",
+)
+@click.option(
     "--diff", "diff_file", default=None, type=Path,
     help="Print a revision diff of this harness against another YAML file.",
 )
@@ -258,6 +263,7 @@ def wireviz(
     traveler,
     report,
     dossier,
+    pinout,
     diff_file,
     cutsheet,
     source,
@@ -476,6 +482,12 @@ def wireviz(
             out = output_base.with_suffix(".cutmachine.csv")
             out.write_text(machine_csv(machine_joblist(harness)))
             print("Cut machine: ", out)
+
+        # Per-connector pinout cards
+        if pinout:
+            out = output_base.with_suffix(".pinout.html")
+            out.write_text(pinout_html(harness))
+            print("Pinout:      ", out)
 
         # Wire markers (CSV + label sheet)
         if markers:
