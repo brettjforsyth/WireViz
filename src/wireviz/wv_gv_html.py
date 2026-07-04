@@ -5,7 +5,7 @@ from typing import List, Optional, Union
 
 from wireviz.DataClasses import Color
 from wireviz.wv_colors import translate_color
-from wireviz.wv_helper import remove_links
+from wireviz.wv_helper import html_text, remove_links
 
 
 def nested_html_table(
@@ -108,4 +108,5 @@ def html_size_attr(image):
 
 
 def html_line_breaks(inp):
-    return remove_links(inp).replace("\n", "<br />") if isinstance(inp, str) else inp
+    # escape user text (strips <a> links), keeping only the intended <br/> breaks
+    return html_text(inp).replace("\n", "<br />") if isinstance(inp, str) else inp

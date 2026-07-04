@@ -160,6 +160,19 @@ def sanitize_html(inp):
     return esc
 
 
+def html_text(inp):
+    """Escape user text for a Graphviz HTML-like label cell.
+
+    Strips any `<a>` links (as remove_links does for GV output) then escapes
+    `&`, `<`, `>` so user-supplied names/labels/part numbers can't inject markup
+    into the generated .gv label (and, via the embedded SVG, into the HTML page).
+    Non-string values pass through unchanged (e.g. integer pin numbers).
+    """
+    if not isinstance(inp, str):
+        return inp
+    return _html.escape(remove_links(inp), quote=False)
+
+
 def _within_any(path: Path, bases: List[Path]) -> bool:
     """True if `path` is one of `bases` or lives inside one of them."""
     path = path.resolve()

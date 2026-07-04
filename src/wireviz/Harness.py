@@ -47,6 +47,7 @@ from wireviz.wv_helper import (
     awg_equiv,
     file_write_text,
     flatten2d,
+    html_text,
     is_arrow,
     mm2_equiv,
     tuplelist2tsv,
@@ -234,9 +235,9 @@ class Harness:
 
             html = []
             # fmt: off
-            rows = [[f'{html_bgcolor(connector.bgcolor_title)}{remove_links(connector.name)}'
+            rows = [[f'{html_bgcolor(connector.bgcolor_title)}{html_text(connector.name)}'
                         if connector.show_name else None],
-                    [pn_info_string(HEADER_PN, None, remove_links(connector.pn)),
+                    [pn_info_string(HEADER_PN, None, html_text(connector.pn)),
                      html_line_breaks(pn_info_string(HEADER_MPN, connector.manufacturer, connector.mpn)),
                      html_line_breaks(pn_info_string(HEADER_SPN, connector.supplier, connector.spn))],
                     [html_line_breaks(connector.type),
@@ -272,9 +273,9 @@ class Harness:
 
                     pinhtml.append("   <tr>")
                     if connector.ports_left:
-                        pinhtml.append(f'    <td port="p{pinindex+1}l">{pinname}</td>')
+                        pinhtml.append(f'    <td port="p{pinindex+1}l">{html_text(pinname)}</td>')
                     if pinlabel:
-                        pinhtml.append(f"    <td>{pinlabel}</td>")
+                        pinhtml.append(f"    <td>{html_text(pinlabel)}</td>")
                     if connector.pincolors:
                         if pincolor in wv_colors._color_hex.keys():
                             # fmt: off
@@ -289,7 +290,7 @@ class Harness:
                             pinhtml.append('    <td colspan="2"></td>')
 
                     if connector.ports_right:
-                        pinhtml.append(f'    <td port="p{pinindex+1}r">{pinname}</td>')
+                        pinhtml.append(f'    <td port="p{pinindex+1}r">{html_text(pinname)}</td>')
                     pinhtml.append("   </tr>")
 
                 pinhtml.append("  </table>")
@@ -353,10 +354,10 @@ class Harness:
                     awg_fmt = f" ({mm2_equiv(cable.gauge)} mm\u00B2)"
 
             # fmt: off
-            rows = [[f'{html_bgcolor(cable.bgcolor_title)}{remove_links(cable.name)}'
+            rows = [[f'{html_bgcolor(cable.bgcolor_title)}{html_text(cable.name)}'
                         if cable.show_name else None],
                     [pn_info_string(HEADER_PN, None,
-                        remove_links(cable.pn)) if not isinstance(cable.pn, list) else None,
+                        html_text(cable.pn)) if not isinstance(cable.pn, list) else None,
                      html_line_breaks(pn_info_string(HEADER_MPN,
                         cable.manufacturer if not isinstance(cable.manufacturer, list) else None,
                         cable.mpn if not isinstance(cable.mpn, list) else None)),
@@ -400,7 +401,7 @@ class Harness:
                 if colorstr:
                     wireinfo.append(colorstr)
                 if cable.wirelabels:
-                    wireinfo.append(wirelabel if wirelabel is not None else "")
+                    wireinfo.append(html_text(wirelabel) if wirelabel is not None else "")
                 wirehtml.append(f'     {":".join(wireinfo)}')
 
                 wirehtml.append(f"    </td>")
@@ -426,7 +427,7 @@ class Harness:
                     if isinstance(cable.pn, list):
                         wireidentification.append(
                             pn_info_string(
-                                HEADER_PN, None, remove_links(cable.pn[i - 1])
+                                HEADER_PN, None, html_text(cable.pn[i - 1])
                             )
                         )
                     manufacturer_info = pn_info_string(
@@ -526,13 +527,13 @@ class Harness:
                     dot.edge(code_left_1, code_left_2)
                     if from_connector.show_name:
                         from_info = [
-                            str(connection.from_name),
-                            str(connection.from_pin),
+                            html_text(str(connection.from_name)),
+                            html_text(str(connection.from_pin)),
                         ]
                         if from_connector.pinlabels:
                             pinlabel = from_connector.pinlabels[from_pin_index]
                             if pinlabel != "":
-                                from_info.append(pinlabel)
+                                from_info.append(html_text(pinlabel))
                         from_string = ":".join(from_info)
                     else:
                         from_string = ""
@@ -550,11 +551,14 @@ class Harness:
                     code_right_2 = f"{connection.to_name}{to_port_str}:w"
                     dot.edge(code_right_1, code_right_2)
                     if to_connector.show_name:
-                        to_info = [str(connection.to_name), str(connection.to_pin)]
+                        to_info = [
+                            html_text(str(connection.to_name)),
+                            html_text(str(connection.to_pin)),
+                        ]
                         if to_connector.pinlabels:
                             pinlabel = to_connector.pinlabels[to_pin_index]
                             if pinlabel != "":
-                                to_info.append(pinlabel)
+                                to_info.append(html_text(pinlabel))
                         to_string = ":".join(to_info)
                     else:
                         to_string = ""

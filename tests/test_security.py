@@ -56,6 +56,30 @@ def _minimal_bom():
     return [["Id", "Description", "Qty"], ["1", "<script>alert('bom')</script>", "1"]]
 
 
+def test_gv_labels_escape_user_text():
+    # user names/pin labels/types must be escaped in the Graphviz label so
+    # injected markup can't pass through into the embedded SVG
+    yml = """
+connectors:
+  X1:
+    pincount: 2
+    pinlabels: ["<xss>", "A&B"]
+    type: "t<i>t"
+  X2: {pincount: 2}
+cables:
+  W1: {wirecount: 2}
+connections:
+  -
+    - X1: [1, 2]
+    - W1: [1, 2]
+    - X2: [1, 2]
+"""
+    gv = wireviz.parse(yml, return_types="harness").graph.source
+    assert "<xss>" not in gv and "&lt;xss&gt;" in gv
+    assert "A&B" not in gv and "A&amp;B" in gv
+    assert "t<i>t" not in gv and "t&lt;i&gt;t" in gv
+
+
 def test_html_output_escapes_metadata_and_bom(tmp_path):
     base = tmp_path / "out"
     (tmp_path / "out.tmp.svg").write_text("<svg></svg>")

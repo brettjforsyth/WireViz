@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from wireviz.DataClasses import AdditionalComponent, Cable, Color, Connector
 from wireviz.wv_colors import translate_color
 from wireviz.wv_gv_html import html_bgcolor_attr, html_line_breaks
-from wireviz.wv_helper import clean_whitespace
+from wireviz.wv_helper import clean_whitespace, html_text
 
 BOM_COLUMNS_ALWAYS = ("id", "description", "qty", "unit", "designators")
 BOM_COLUMNS_OPTIONAL = ("pn", "manufacturer", "mpn", "supplier", "spn")
@@ -256,22 +256,24 @@ def component_table_entry(
     spn: Optional[str] = None,
 ) -> str:
     """Return a diagram node table row string with an additional component."""
+    # escape the user-supplied leaves here (not the assembled string) so the
+    # structural <br/> and separators below are preserved as real markup
     part_number_list = [
-        pn_info_string(HEADER_PN, None, pn),
-        pn_info_string(HEADER_MPN, manufacturer, mpn),
-        pn_info_string(HEADER_SPN, supplier, spn),
+        pn_info_string(HEADER_PN, None, html_text(pn)),
+        pn_info_string(HEADER_MPN, html_text(manufacturer), html_text(mpn)),
+        pn_info_string(HEADER_SPN, html_text(supplier), html_text(spn)),
     ]
     output = (
         f"{qty}"
         + (f" {unit}" if unit else "")
-        + f" x {type}"
+        + f" x {html_line_breaks(type)}"
         + ("<br/>" if any(part_number_list) else "")
         + (", ".join([pn for pn in part_number_list if pn]))
     )
     # format the above output as left aligned text in a single visible cell
     # indent is set to two to match the indent in the generated html table
     return f"""<table border="0" cellspacing="0" cellpadding="3" cellborder="1"{html_bgcolor_attr(bgcolor)}><tr>
-   <td align="left" balign="left">{html_line_breaks(output)}</td>
+   <td align="left" balign="left">{output}</td>
   </tr></table>"""
 
 
