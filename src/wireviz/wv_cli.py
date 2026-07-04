@@ -25,6 +25,7 @@ from wireviz.wv_weight import weight_report
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
 from wireviz.wv_formboard import PAGE_SIZES, FormboardConfig, page_grid, build_formboard, render_formboard
 from wireviz.wv_devices import expand_devices, list_devices
+from wireviz.wv_import import from_kicad_netlist, from_wirelist
 from wireviz.wv_drc import format_report, has_errors, run_drc
 from wireviz.wv_sourcing import (
     DigiKeyProvider,
@@ -190,6 +191,14 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     "Needs DIGIKEY_CLIENT_ID/SECRET or MOUSER_API_KEY in the environment.",
 )
 @click.option(
+    "--import",
+    "import_fmt",
+    default=None,
+    type=click.Choice(["wirelist", "kicad"]),
+    help="Treat FILE as an import source: a from/to wire-list CSV or a KiCad "
+    "netlist, converted to a harness before generating outputs.",
+)
+@click.option(
     "--cad-dir",
     "cad_dir",
     default=None,
@@ -240,6 +249,7 @@ def wireviz(
     diff_file,
     cutsheet,
     source,
+    import_fmt,
     cad_dir,
     list_devices_flag,
     list_connectors_flag,
@@ -325,16 +335,25 @@ def wireviz(
         for p in prepend:
             image_paths.add(Path(p).parent)
 
-        # Expand device-library references and back-fill connector-type
-        # metadata before parsing. Only switch to the dict path when one of
-        # those features is actually used, so behaviour is identical otherwise.
-        harness_input = yaml_input
-        try:
-            probe = yaml.safe_load(yaml_input)
-        except Exception:  # noqa: BLE001 - let parse report YAML errors
-            probe = None
-        if isinstance(probe, dict) and _wants_preprocess(probe):
-            harness_input = apply_connector_types(expand_devices(probe))
+        # If importing, convert the source (wire-list CSV or KiCad netlist) into
+        # a WireViz data dict first.
+        if import_fmt:
+            harness_input = (
+                from_wirelist(yaml_input)
+                if import_fmt == "wirelist"
+                else from_kicad_netlist(yaml_input)
+            )
+        else:
+            # Expand device-library references and back-fill connector-type
+            # metadata before parsing. Only switch to the dict path when one of
+            # those features is used, so behaviour is identical otherwise.
+            harness_input = yaml_input
+            try:
+                probe = yaml.safe_load(yaml_input)
+            except Exception:  # noqa: BLE001 - let parse report YAML errors
+                probe = None
+            if isinstance(probe, dict) and _wants_preprocess(probe):
+                harness_input = apply_connector_types(expand_devices(probe))
 
         # Parse once to the model; the extra features below run on it directly
         # and need no `dot` binary, so a missing Graphviz can't block them.
