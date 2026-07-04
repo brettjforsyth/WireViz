@@ -201,6 +201,8 @@ bundle diameter + recommended sleeve) to the console.
   and the twist length factor applied only to the twisted wires.
 - **Bundle derating** (`wv_electrical.bundle_derating`, DRC `W-BUNDLE-DERATE`) —
   ampacity derated by conductor count for wires bundled together.
+- **Pinout cards** (`wv_pinout`, `--pinout`) — a printable HTML card per
+  connector: every pin with its label, wire, and destination.
 
 ## Still to come
 
