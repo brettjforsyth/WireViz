@@ -41,6 +41,13 @@
   an accessory BOM.
 - Importers (`wv_import`, `--import wirelist|kicad`): seed a harness from a
   from/to wire-list CSV or a KiCad netlist.
+- Second engineering batch: continuity/isolation test program (`wv_testgen`,
+  `--testprog`), splice planner (`wv_splice`), harness variants (`wv_variants`,
+  `--variant`), crimp tooling (`wv_crimp`, `--crimp`), routed length
+  (`wv_routing`), ZPL labels (`wv_zpl`, `--zpl`), power/voltage-drop report
+  (`wv_power`), where-used cross-reference (`wv_whereused`, `--whereused`),
+  project BOM consolidation (`wv_project`), and inspection checklist +
+  traceability (`wv_inspection`, `--inspection`).
 
 ### Maintenance
 

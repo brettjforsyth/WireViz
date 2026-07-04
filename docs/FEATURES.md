@@ -207,6 +207,28 @@ bundle diameter + recommended sleeve) to the console.
   renders the harness from data so you can drag connectors: nodes snap to the
   grid, wires re-route live between the moved pins, and the edited layout
   exports as JSON. Self-contained and offline.
+- **Test program** (`wv_testgen`, `--testprog`) — continuity checks (pins that
+  must connect) and isolation checks (pins that must stay open) for a harness
+  tester, from the netlist.
+- **Splice planner** (`wv_splice`) — branch points where 3+ wires meet, a splice
+  BOM, and a current-sum check against the thinnest branch wire.
+- **Harness variants** (`wv_variants`, `--variant` / `--list-variants`) — one
+  source with `variants:` tags generates a family (LHD/RHD, trim levels, options).
+- **Crimp tooling** (`wv_crimp`, `--crimp`) — contact series + wire gauge → crimp
+  tool, die, and crimp height (generic specs; extensible).
+- **Routed length** (`wv_routing`) — named branch segments with lengths; each
+  wire's cut length is the sum of its segment path.
+- **ZPL labels** (`wv_zpl`, `--zpl`) — wire markers as Zebra ZPL for direct
+  label-printer output.
+- **Power / voltage-drop report** (`wv_power`, in `--report`) — per-cable
+  resistance, voltage drop %, and I²R loss.
+- **Where-used** (`wv_whereused`, `--whereused MPN`) — reverse-lookup any part
+  across the harness.
+- **Project BOM consolidation** (`wv_project`) — merge several harness BOMs into
+  one purchasing BOM with combined quantities.
+- **Inspection & traceability** (`wv_inspection`, `--inspection`) — an
+  IPC/WHMA-A-620-referenced build checklist plus a deterministic traceability
+  code tying a built unit to its spec.
 
 ## Still to come
 
