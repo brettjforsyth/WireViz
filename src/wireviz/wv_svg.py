@@ -41,7 +41,8 @@ class GridConfig:
     margin: int = 40
     image_band: int = 90  # vertical space reserved for a component image
     show_grid: bool = True
-    channel_gap: int = 4  # centre-to-centre spacing of parallel wire runs
+    route_pitch: int = 5  # maze-router grid step = spacing between parallel wires
+    turn_penalty: int = 3  # extra routing cost per corner (fewer, cleaner bends)
     hop_radius: int = 2  # radius of the half-circle where wires cross
     wire_core: float = 1.5  # coloured wire width
     wire_casing: float = 3.0  # dark casing width under the colour
@@ -193,58 +194,36 @@ def build_layout(
             max_bottom = max(max_bottom, y)
         col_x = col_x + col_width + cfg.col_gap
 
-    # route wires: connector-pin -> cable-wire -> connector-pin, orthogonally
-    wires: List[dict] = []
+    width = cfg.snap(col_x - cfg.col_gap + cfg.margin)
+    height = cfg.snap(max_bottom + cfg.margin)
+
+    # collect one routing job per wire segment (connector-pin -> cable-wire ->
+    # connector-pin), then route them all with a shared maze router so no two
+    # wires ever share a grid edge (i.e. lie on top of each other).
+    jobs: List[dict] = []
     for fname, fpin, cname, vport, tname, tpin in _endpoints(harness):
         cable_node = nodes.get(cname)
         if cable_node is None:
             continue
         wire_y = _pin_y(cable_node, vport)
-        color_hex = _wire_hex(harness.cables[cname], vport)
-        # from-connector segment
-        if fname in nodes and wire_y is not None:
-            seg = _route(nodes[fname], fpin, cable_node, wire_y, cfg)
-            if seg:
-                wires.append({"cable": cname, "wire": vport, "color": color_hex, "points": seg})
-        # to-connector segment
-        if tname in nodes and wire_y is not None:
-            seg = _route(cable_node, wire_y, nodes[tname], tpin, cfg, from_wire=True)
-            if seg:
-                wires.append({"cable": cname, "wire": vport, "color": color_hex, "points": seg})
-
-    _assign_channels(wires, cfg)
-
-    width = cfg.snap(col_x - cfg.col_gap + cfg.margin)
-    height = cfg.snap(max_bottom + cfg.margin)
-    return {"config": cfg.__dict__, "nodes": nodes, "wires": wires, "width": width, "height": height}
-
-
-def _assign_channels(wires: List[dict], cfg: GridConfig) -> None:
-    """Spread the vertical run of each wire so parallel wires sit side by side.
-
-    All wires whose vertical middle run shares an x (i.e. run through the same
-    corridor between two columns) are given a distinct x offset, `channel_gap`
-    apart and centred on the original channel, so they no longer stack on top
-    of each other. Ordered by run midpoint height to reduce self-crossings.
-    Mutates each wire's `points` in place.
-    """
-    from collections import defaultdict
-
-    corridors: Dict[int, List[dict]] = defaultdict(list)
-    for w in wires:
-        pts = w["points"]
-        if len(pts) >= 4 and pts[1][0] == pts[2][0]:
-            corridors[pts[1][0]].append(w)
-    for group in corridors.values():
-        group.sort(key=lambda w: (w["points"][1][1] + w["points"][2][1]) / 2)
-        n = len(group)
-        if n < 2:
+        if wire_y is None:
             continue
-        for i, w in enumerate(group):
-            offset = int(round((i - (n - 1) / 2) * cfg.channel_gap))
-            pts = w["points"]
-            pts[1] = (pts[1][0] + offset, pts[1][1])
-            pts[2] = (pts[2][0] + offset, pts[2][1])
+        color_hex = _wire_hex(harness.cables[cname], vport)
+        meta = {"cable": cname, "wire": vport, "color": color_hex}
+        fnode = nodes.get(fname)
+        if fnode is not None:
+            fy = _pin_y(fnode, fpin)
+            if fy is not None:
+                jobs.append({**meta, "a": (fnode, fy), "b": (cable_node, wire_y)})
+        tnode = nodes.get(tname)
+        if tnode is not None:
+            ty = _pin_y(tnode, tpin)
+            if ty is not None:
+                jobs.append({**meta, "a": (cable_node, wire_y), "b": (tnode, ty)})
+
+    wires = _route_all(jobs, nodes, cfg, width, height)
+
+    return {"config": cfg.__dict__, "nodes": nodes, "wires": wires, "width": width, "height": height}
 
 
 def _pin_y(node: dict, pin_id) -> Optional[int]:
@@ -269,34 +248,219 @@ def _wire_hex(cable, via_port) -> str:
     return "#000000"
 
 
-def _route(a: dict, a_pin, b: dict, b_pin, cfg: GridConfig, from_wire=False):
-    """Orthogonal grid-snapped route from node a to node b.
+# --- maze router (Lee/Dijkstra with edge reservation) ----------------------
+#
+# Orthogonal wire routing on a coarse grid, the standard EDA approach. Each
+# wire is routed as a shortest path on a grid whose step is `route_pitch`;
+# every grid *edge* a wire uses is reserved so no later wire can reuse it. Two
+# wires may share a grid *vertex* (a perpendicular crossing -> drawn as a hop)
+# but never an edge, which is exactly the guarantee "wires are never on top of
+# each other". Node rectangles are obstacles, so wires route in the gaps.
 
-    The cable end is always passed as an already-resolved y coordinate; the
-    connector end is passed as a pin id and looked up. `from_wire` says which
-    side is the cable: True means a is the cable (a_pin is that y), False means
-    b is the cable (b_pin is that y).
+
+def _edge(p, q):
+    return (p, q) if p <= q else (q, p)
+
+
+def _snapr(v, rp):
+    return int(round(v / rp) * rp)
+
+
+def _terminal(node, y, other):
+    """Exact point where a wire meets `node`, on the edge facing `other`."""
+    if node["x"] <= other["x"]:
+        return (node["x"] + node["w"], y)
+    return (node["x"], y)
+
+
+def _blocked_cells(nodes, rp):
+    """Grid points inside node rectangles (obstacles the router avoids)."""
+    blocked = set()
+    for n in nodes.values():
+        x0, x1 = _snapr(n["x"], rp), _snapr(n["x"] + n["w"], rp)
+        y0, y1 = _snapr(n["y"], rp), _snapr(n["y"] + n["h"], rp)
+        gy = y0
+        while gy <= y1:
+            gx = x0
+            while gx <= x1:
+                blocked.add((gx, gy))
+                gx += rp
+            gy += rp
+    return blocked
+
+
+def _astar(start, goal, blocked, used, cfg, bounds, terminals=frozenset()):
+    """Least-cost orthogonal path start->goal (A*), avoiding blocked cells and
+    edges owned by other wires, penalising turns. Returns points, or None.
+
+    `used` maps each occupied edge to the terminal set of the wire that owns it;
+    an edge may be reused only by a wire that shares one of those terminals (two
+    wires bundled at the same pin). A* (Manhattan heuristic) keeps whole-canvas
+    search fast so a congested wire detours into open space rather than fail.
     """
-    if from_wire:
-        ay = a_pin  # explicit cable-wire y
-        by = _pin_y(b, b_pin)  # connector pin id
-    else:
-        ay = _pin_y(a, a_pin)  # connector pin id
-        by = b_pin  # explicit cable-wire y
-    if ay is None or by is None:
+    import heapq
+
+    rp, tp = cfg.route_pitch, cfg.turn_penalty
+    minx, miny, maxx, maxy = bounds
+    gx, gy = goal
+
+    def h(x, y):
+        return (abs(x - gx) + abs(y - gy)) // rp
+
+    start_st = (start[0], start[1], 0, 0)
+    dist = {start_st: 0}
+    prev = {}
+    pq = [(h(*start), 0, start_st)]
+    goal_state = None
+    while pq:
+        _, c, st = heapq.heappop(pq)
+        if c > dist.get(st, 1 << 30):
+            continue
+        x, y, dx, dy = st
+        if (x, y) == goal:
+            goal_state = st
+            break
+        for ndx, ndy in ((rp, 0), (-rp, 0), (0, rp), (0, -rp)):
+            nx, ny = x + ndx, y + ndy
+            if nx < minx or nx > maxx or ny < miny or ny > maxy:
+                continue
+            if (nx, ny) != goal and (nx, ny) in blocked:
+                continue
+            owner = used.get(_edge((x, y), (nx, ny)))
+            if owner is not None and not (owner & terminals):
+                continue
+            turned = tp if (dx or dy) and (ndx, ndy) != (dx, dy) else 0
+            nc = c + 1 + turned
+            nst = (nx, ny, ndx, ndy)
+            if nc < dist.get(nst, 1 << 30):
+                dist[nst] = nc
+                prev[nst] = st
+                heapq.heappush(pq, (nc + h(nx, ny), nc, nst))
+    if goal_state is None:
         return None
-    # exit a on the side facing b, enter b on the side facing a
-    if a["x"] <= b["x"]:
-        ax = a["x"] + a["w"]
-        bx = b["x"]
-    else:
-        ax = a["x"]
-        bx = b["x"] + b["w"]
-    ax, bx = cfg.snap(ax), cfg.snap(bx)
-    ay, by = cfg.snap(ay), cfg.snap(by)
-    midx = cfg.snap((ax + bx) / 2)
-    # Manhattan: horizontal to channel, vertical, horizontal into target
-    return [(ax, ay), (midx, ay), (midx, by), (bx, by)]
+    path = []
+    st = goal_state
+    while True:
+        path.append((st[0], st[1]))
+        if st not in prev:
+            break
+        st = prev[st]
+    path.reverse()
+    return path
+
+
+def _simplify(pts):
+    """Drop duplicate and collinear intermediate points."""
+    dedup = [p for i, p in enumerate(pts) if i == 0 or p != pts[i - 1]]
+    if len(dedup) < 3:
+        return dedup
+    out = [dedup[0]]
+    for i in range(1, len(dedup) - 1):
+        (px, py), (x, y), (nx, ny) = out[-1], dedup[i], dedup[i + 1]
+        if (x - px) * (ny - y) != (y - py) * (nx - x):  # a genuine turn
+            out.append(dedup[i])
+    out.append(dedup[-1])
+    return out
+
+
+def _iter_unit_edges(path, rp):
+    """Yield the rp-length grid edges a corner polyline occupies."""
+    for (x1, y1), (x2, y2) in zip(path, path[1:]):
+        if x1 == x2:
+            lo, hi = sorted((y1, y2))
+            for y in range(lo, hi, rp):
+                yield _edge((x1, y), (x1, y + rp))
+        elif y1 == y2:
+            lo, hi = sorted((x1, x2))
+            for x in range(lo, hi, rp):
+                yield _edge((x, y1), (x + rp, y1))
+
+
+def _candidate(a, b, chan, rp):
+    """A clean 2-bend route through a wire's assigned vertical channel `chan`
+    (or a straight line when the endpoints share a row)."""
+    if a[1] == b[1]:
+        return [a, b]
+    cx = chan if chan is not None else _snapr((a[0] + b[0]) / 2, rp)
+    return [a, (cx, a[1]), (cx, b[1]), b]
+
+
+def _fits(path, used, terminals, rp):
+    """True if `path` reuses no edge owned by a wire it shares no pin with."""
+    for e in _iter_unit_edges(path, rp):
+        owner = used.get(e)
+        if owner is not None and not (owner & terminals):
+            return False
+    return True
+
+
+def _route_all(jobs, nodes, cfg, width, height):
+    """Route every wire segment so no two wires ever share an edge.
+
+    Each wire is given a unique vertical channel and routed with a clean 2-bend
+    path (the bus look); straight wires are placed first so they keep their
+    lane. Any wire whose deterministic route would collide with an already
+    placed wire is re-routed with the edge-avoiding A* maze router. Every wire
+    reserves its grid edges, so overlaps are impossible.
+    """
+    from collections import defaultdict
+
+    rp = cfg.route_pitch
+    blocked = _blocked_cells(nodes, rp)
+    used = {}  # edge -> frozenset of the owning wire's terminal points
+    pad = cfg.col_gap
+    bounds = (
+        -pad,
+        -pad,
+        _snapr(width, rp) + pad,
+        _snapr(height, rp) + pad,
+    )
+
+    prepared = []
+    for job in jobs:
+        anode, ay = job["a"]
+        bnode, by = job["b"]
+        a = _terminal(anode, _snapr(ay, rp), bnode)
+        b = _terminal(bnode, _snapr(by, rp), anode)
+        prepared.append({"job": job, "a": a, "b": b})
+
+    # assign a unique vertical channel to every wire sharing a corridor
+    corridors = defaultdict(list)
+    for p in prepared:
+        p["xL"], p["xR"] = sorted((p["a"][0], p["b"][0]))
+        corridors[(p["xL"], p["xR"])].append(p)
+    for (xL, xR), group in corridors.items():
+        group.sort(key=lambda p: (p["a"][1] + p["b"][1]) / 2)
+        n = len(group)
+        for i, p in enumerate(group):
+            p["chan"] = _snapr(xL + (i + 1) / (n + 1) * (xR - xL), rp)
+
+    # place straight wires first, then shortest to longest
+    order = sorted(
+        prepared,
+        key=lambda p: (p["a"][1] != p["b"][1], abs(p["a"][0] - p["b"][0]) + abs(p["a"][1] - p["b"][1])),
+    )
+
+    wires = []
+    for p in order:
+        a, b, job = p["a"], p["b"], p["job"]
+        terminals = frozenset((a, b))
+        cand = _candidate(a, b, p.get("chan"), rp)
+        if _fits(cand, used, terminals, rp):
+            path = cand
+        else:
+            adir = rp if b[0] > a[0] else -rp
+            a_start, b_start = (a[0] + adir, a[1]), (b[0] - adir, b[1])
+            detour = _astar(a_start, b_start, blocked, used, cfg, bounds, terminals)
+            path = [a] + detour + [b] if detour else cand
+        for e in _iter_unit_edges(path, rp):
+            used[e] = terminals
+        wires.append({**job_meta(job), "points": _simplify(path)})
+    return wires
+
+
+def job_meta(job):
+    return {"cable": job["cable"], "wire": job["wire"], "color": job["color"]}
 
 
 # --- SVG emission ----------------------------------------------------------

@@ -82,26 +82,61 @@ def test_grid_pitch_changes_geometry():
         assert node["x"] % 25 == 0 and node["y"] % 25 == 0
 
 
-def test_parallel_wires_get_distinct_channels():
-    # three wires from X1 to W1 share a corridor; their vertical runs must not
-    # stack on the same x.
+def _unit_edges(wire, rp):
+    """Decompose a wire polyline into the set of rp-length grid edges it uses."""
+    edges = set()
+    for (x1, y1), (x2, y2) in zip(wire["points"], wire["points"][1:]):
+        if x1 == x2:  # vertical
+            lo, hi = sorted((y1, y2))
+            for y in range(lo, hi, rp):
+                edges.add(((x1, y), (x1, y + rp)))
+        elif y1 == y2:  # horizontal
+            lo, hi = sorted((x1, x2))
+            for x in range(lo, hi, rp):
+                edges.add(((x, y1), (x + rp, y1)))
+    return edges
+
+
+def _assert_no_overlap(wires, rp, label=""):
+    """No two wires share a routing edge unless they connect to a common pin
+    (wires bundled at the same pin — e.g. a wire and a shield, or a splice —
+    legitimately overlap near it)."""
+    owner = {}
+    for w in wires:
+        terms = {w["points"][0], w["points"][-1]}
+        for e in _unit_edges(w, rp):
+            if e in owner:
+                assert terms & owner[e], f"{label}unrelated wires overlap at {e}"
+            else:
+                owner[e] = terms
+
+
+def test_no_two_wires_share_an_edge():
+    # The core guarantee: wires are never on top of each other.
     yml = """
 connectors:
-  X1: {pincount: 3}
-  X2: {pincount: 3}
+  X1: {pincount: 4}
+  X2: {pincount: 4}
 cables:
-  W1: {wirecount: 3}
+  W1: {wirecount: 4}
 connections:
   -
-    - X1: [1, 2, 3]
-    - W1: [1, 2, 3]
-    - X2: [1, 2, 3]
+    - X1: [1, 2, 3, 4]
+    - W1: [1, 2, 3, 4]
+    - X2: [4, 3, 2, 1]
 """
-    lay = build_layout(harness_of(yml))
-    # gather the vertical-run x of the X1->W1 (from) segments
-    xs = [w["points"][1][0] for w in lay["wires"] if w["points"][1][0] == w["points"][2][0]]
-    from_corridor = [x for x in xs if x < lay["nodes"]["W1"]["x"]]
-    assert len(set(from_corridor)) == len(from_corridor), "channels overlap"
+    cfg = GridConfig()
+    lay = build_layout(harness_of(yml), cfg)
+    _assert_no_overlap(lay["wires"], cfg.route_pitch)
+
+
+def test_examples_have_no_wire_overlap():
+    cfg = GridConfig()
+    for subdir in ("examples", "tutorial"):
+        for y in sorted((REPO_ROOT / subdir).glob("*.yml")):
+            h = wireviz.parse(str(y), return_types="harness")
+            lay = build_layout(h, cfg)
+            _assert_no_overlap(lay["wires"], cfg.route_pitch, label=f"{y.name}: ")
 
 
 def _h(points):
