@@ -22,6 +22,8 @@ length equals the cable length (no surprises vs. the current behaviour).
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
+from wireviz.wv_idents import bands_html, ident_string
+
 COLUMNS = [
     "wire",
     "from",
@@ -31,6 +33,7 @@ COLUMNS = [
     "length",
     "unit",
     "label",
+    "ident",
 ]
 
 
@@ -113,6 +116,20 @@ def _wire_label(cable, via_port) -> str:
     return ""
 
 
+def _ident_code(cable, via_port) -> str:
+    """Numeric identifier for the wire's MIL-STD ident bands.
+
+    A numeric wire label wins (it is the number the builder assigned); otherwise
+    the wire number is used. The shield has no numeric ident.
+    """
+    if _is_shield(via_port):
+        return ""
+    label = _wire_label(cable, via_port)
+    if label.isdigit():
+        return label
+    return str(via_port) if isinstance(via_port, int) else ""
+
+
 def compute_length(cable, terminated_ends: int, options: CutSheetOptions) -> float:
     """Apply the allowance/twist/rounding chain to a cable's base length."""
     length = float(cable.length or 0)
@@ -155,6 +172,8 @@ def build_cut_list(
                     "length": _clean(length),
                     "unit": cable.length_unit or "",
                     "label": _wire_label(cable, via),
+                    "ident": ident_string(_ident_code(cable, via)),
+                    "ident_code": _ident_code(cable, via),
                     "_sort": (cable_name, 1 if _is_shield(via) else 0, via if isinstance(via, int) else 0),
                 }
             )
@@ -183,6 +202,7 @@ _HEADERS = {
     "length": "Length",
     "unit": "Unit",
     "label": "Label",
+    "ident": "Ident",
 }
 
 
@@ -211,8 +231,17 @@ def to_html(rows: List[Dict[str, object]], title: str = "Wire Cut Sheet") -> str
     head = "".join(f"<th>{escape(_HEADERS[c])}</th>" for c in COLUMNS)
     body = []
     for r in rows:
-        cells = "".join(f"<td>{escape(str(r.get(c, '')))}</td>" for c in COLUMNS)
-        body.append(f"<tr>{cells}</tr>")
+        cells = []
+        for c in COLUMNS:
+            if c == "ident":
+                # render the MIL-STD colour bands visually, with the text form
+                swatches = bands_html(r.get("ident_code", ""))
+                text = escape(str(r.get("ident", "")))
+                cell = f"{swatches} {text}".strip() if swatches else text
+                cells.append(f"<td>{cell}</td>")
+            else:
+                cells.append(f"<td>{escape(str(r.get(c, '')))}</td>")
+        body.append(f"<tr>{''.join(cells)}</tr>")
     return (
         f"<table class='cutsheet'>\n<caption>{escape(title)}</caption>\n"
         f"<thead><tr>{head}</tr></thead>\n<tbody>\n"
