@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 
+import html as _html
 import re
 from pathlib import Path
 from typing import Dict, List
+
+# Largest range expand() will materialise, e.g. "1-100000". A range beyond this
+# is almost certainly a typo or an attempt to exhaust memory (a tiny YAML like
+# "pins: [1-999999999]" would otherwise allocate a billion-element list).
+MAX_EXPAND = 100_000
 
 awg_equiv_table = {
     "0.09": "28",
@@ -49,17 +55,23 @@ def expand(yaml_data):
             try:
                 a = int(a)
                 b = int(b)
-                if a < b:
-                    for x in range(a, b + 1):
-                        output.append(x)  # ascending range
-                elif a > b:
-                    for x in range(a, b - 1, -1):
-                        output.append(x)  # descending range
-                else:  # a == b
-                    output.append(a)  # range of length 1
-            except:
+            except ValueError:
                 # '-' was not a delimiter between two ints, pass e through unchanged
                 output.append(e)
+                continue
+            if abs(b - a) + 1 > MAX_EXPAND:
+                raise ValueError(
+                    f"Refusing to expand the range '{e}': "
+                    f"{abs(b - a) + 1} items exceeds the {MAX_EXPAND} limit."
+                )
+            if a < b:
+                for x in range(a, b + 1):
+                    output.append(x)  # ascending range
+            elif a > b:
+                for x in range(a, b - 1, -1):
+                    output.append(x)  # descending range
+            else:  # a == b
+                output.append(a)  # range of length 1
         else:
             try:
                 x = int(e)  # single int
@@ -106,6 +118,56 @@ def remove_links(inp):
         if isinstance(inp, str)
         else inp
     )
+
+
+# --- HTML sanitisation -----------------------------------------------------
+# WireViz intentionally lets a few fields (part numbers, notes) carry hyperlinks
+# and line breaks into the HTML output, but everything is user-supplied YAML, so
+# raw <script>, <img onerror=...>, event handlers etc. must not survive into the
+# generated .html. sanitize_html escapes the whole string, then restores only a
+# safe allow-list: <br> and <a href="SAFE_URL">...</a>.
+
+_ESC_BR = re.compile(r"&lt;br\s*/?&gt;", re.IGNORECASE)
+_ESC_A_OPEN = re.compile(r"&lt;a\s+href=&quot;(?P<url>.*?)&quot;&gt;", re.IGNORECASE | re.DOTALL)
+_ESC_A_CLOSE = re.compile(r"&lt;/a&gt;", re.IGNORECASE)
+_SCHEME = re.compile(r"^([a-z][a-z0-9+.\-]*):", re.IGNORECASE)
+_SAFE_SCHEMES = {"http", "https", "mailto", "ftp"}
+
+
+def _safe_url(url: str) -> bool:
+    """Allow relative URLs and http/https/mailto/ftp; block javascript:, data:,
+    etc. Whitespace/control chars (used to obfuscate schemes) are stripped first.
+    """
+    u = re.sub(r"[\s\x00-\x1f]+", "", _html.unescape(url)).lower()
+    m = _SCHEME.match(u)
+    return not m or m.group(1) in _SAFE_SCHEMES
+
+
+def sanitize_html(inp):
+    """Escape user text for safe HTML embedding, keeping only <br> and safe
+    <a href> links. Non-strings pass through unchanged."""
+    if not isinstance(inp, str):
+        return inp
+    esc = _html.escape(inp, quote=True)
+    esc = _ESC_BR.sub("<br/>", esc)
+
+    def _restore_a(match: re.Match) -> str:
+        url = match.group("url")
+        return f'<a href="{url}">' if _safe_url(url) else match.group(0)
+
+    esc = _ESC_A_OPEN.sub(_restore_a, esc)
+    esc = _ESC_A_CLOSE.sub("</a>", esc)
+    return esc
+
+
+def _within_any(path: Path, bases: List[Path]) -> bool:
+    """True if `path` is one of `bases` or lives inside one of them."""
+    path = path.resolve()
+    for base in bases:
+        base = base.resolve()
+        if path == base or base in path.parents:
+            return True
+    return False
 
 
 def clean_whitespace(inp):
@@ -167,25 +229,36 @@ def aspect_ratio(image_src):
     return 1  # Assume 1:1 when unable to read actual image size
 
 
-def smart_file_resolve(filename: str, possible_paths: (str, List[str])) -> Path:
+def smart_file_resolve(
+    filename: str, possible_paths: (str, List[str]), restrict: bool = True
+) -> Path:
+    """Resolve `filename` against `possible_paths`.
+
+    When `restrict` is True (the default), the resolved file must live inside
+    one of `possible_paths`; absolute paths and ``../`` escapes that land
+    outside every permitted directory are rejected. This prevents a malicious
+    YAML file (image src or template name) from reading arbitrary files such as
+    ``../../../../etc/passwd``.
+    """
     if not isinstance(possible_paths, List):
         possible_paths = [possible_paths]
+    bases = [Path(path).resolve() for path in possible_paths if path is not None]
     filename = Path(filename)
+
     if filename.is_absolute():
-        if filename.exists():
-            return filename
-        else:
-            raise Exception(f"{filename} does not exist.")
+        candidates = [filename.resolve()]
     else:  # search all possible paths in decreasing order of precedence
-        possible_paths = [
-            Path(path).resolve() for path in possible_paths if path is not None
-        ]
-        for possible_path in possible_paths:
-            resolved_path = (possible_path / filename).resolve()
-            if resolved_path.exists():
-                return resolved_path
-        else:
-            raise Exception(
-                f"{filename} was not found in any of the following locations: \n"
-                + "\n".join([str(x) for x in possible_paths])
-            )
+        candidates = [(base / filename).resolve() for base in bases]
+
+    for candidate in candidates:
+        if candidate.exists():
+            if restrict and not _within_any(candidate, bases):
+                raise Exception(
+                    f"Refusing to resolve '{filename}': it points outside the "
+                    f"permitted directories."
+                )
+            return candidate
+    raise Exception(
+        f"{filename} was not found in any of the following locations: \n"
+        + "\n".join([str(x) for x in bases])
+    )

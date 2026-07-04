@@ -142,8 +142,10 @@ def parse(
                         image = attribs.get("image")
                         if isinstance(image, dict):
                             image_path = image["src"]
-                            if image_path and not Path(image_path).is_absolute():
-                                # resolve relative image path
+                            if image_path:
+                                # resolve the image path, containing it to the
+                                # permitted image directories (blocks traversal
+                                # and out-of-tree absolute paths)
                                 image["src"] = smart_file_resolve(
                                     image_path, image_paths
                                 )

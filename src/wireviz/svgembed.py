@@ -30,8 +30,14 @@ def embed_svg_images(svg_in: str, base_path: Union[str, Path] = Path.cwd()) -> s
 
     def replace(match: re.Match) -> str:
         imgurl = match["URL"]
+        # Skip data URIs (already embedded) and anything that isn't a readable
+        # local file, so a stray href can't turn into an arbitrary file read.
+        if imgurl.lower().startswith("data:"):
+            return match.group(0)
         if not imgurl in images_b64:  # only encode/cache every unique URL once
             imgurl_abs = (Path(base_path) / imgurl).resolve()
+            if not imgurl_abs.is_file():
+                return match.group(0)  # leave the tag untouched
             image = imgurl_abs.read_bytes()
             images_b64[imgurl] = base64.b64encode(image).decode("utf-8")
         return image_tag(

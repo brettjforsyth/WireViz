@@ -12,6 +12,7 @@ from wireviz.wv_helper import (
     file_read_text,
     file_write_text,
     flatten2d,
+    sanitize_html,
     smart_file_resolve,
 )
 
@@ -57,7 +58,9 @@ def generate_html_output(
     bom_header_html = "  <tr>\n"
     for item in bom[0]:
         th_class = f"bom_col_{item.lower()}"
-        bom_header_html = f'{bom_header_html}    <th class="{th_class}">{item}</th>\n'
+        bom_header_html = (
+            f'{bom_header_html}    <th class="{th_class}">{sanitize_html(item)}</th>\n'
+        )
     bom_header_html = f"{bom_header_html}  </tr>\n"
 
     # generate BOM contents
@@ -66,7 +69,11 @@ def generate_html_output(
         row_html = "  <tr>\n"
         for i, item in enumerate(row):
             td_class = f"bom_col_{bom[0][i].lower()}"
-            row_html = f'{row_html}    <td class="{td_class}">{item}</td>\n'
+            # user-supplied BOM cells (part numbers, descriptions, ...) are
+            # sanitised so injected markup can't execute in the HTML output
+            row_html = (
+                f'{row_html}    <td class="{td_class}">{sanitize_html(item)}</td>\n'
+            )
         row_html = f"{row_html}  </tr>\n"
         bom_contents.append(row_html)
 
@@ -106,19 +113,24 @@ def generate_html_output(
         "<!-- %diagram_png_b64% -->", lambda: data_URI_base64(f"{filename}.png")
     )
 
+    # user-supplied metadata is sanitised (keeping line breaks and safe links)
+    # so a malicious title/notes/author cannot inject executable markup
+    def safe_text(value) -> str:
+        return sanitize_html(str(value)).replace("\n", "<br/>")
+
     # prepare metadata replacements
     if metadata:
         for item, contents in metadata.items():
             if isinstance(contents, (str, int, float)):
-                replacements[f"<!-- %{item}% -->"] = html_line_breaks(str(contents))
+                replacements[f"<!-- %{item}% -->"] = safe_text(contents)
             elif isinstance(contents, Dict):  # useful for authors, revisions
                 for index, (category, entry) in enumerate(contents.items()):
                     if isinstance(entry, Dict):
-                        replacements[f"<!-- %{item}_{index+1}% -->"] = str(category)
+                        replacements[f"<!-- %{item}_{index+1}% -->"] = safe_text(category)
                         for entry_key, entry_value in entry.items():
                             replacements[
                                 f"<!-- %{item}_{index+1}_{entry_key}% -->"
-                            ] = html_line_breaks(str(entry_value))
+                            ] = safe_text(entry_value)
                     elif isinstance(entry, (str, int, float)):
                         pass  # TODO?: replacements[f"<!-- %{item}_{category}% -->"] = html_line_breaks(str(entry))
 
