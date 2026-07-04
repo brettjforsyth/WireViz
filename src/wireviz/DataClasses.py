@@ -328,6 +328,7 @@ class Cable:
     color: Optional[Color] = None
     wirecount: Optional[int] = None
     shield: Union[bool, Color] = False
+    twisting: List[List[int]] = field(default_factory=list)  # groups of twisted wires
     image: Optional[Image] = None
     notes: Optional[MultilineHypertext] = None
     colors: List[Colors] = field(default_factory=list)

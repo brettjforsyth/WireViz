@@ -33,6 +33,7 @@ COLUMNS = [
     "length",
     "unit",
     "label",
+    "twist",
     "ident",
 ]
 
@@ -116,6 +117,16 @@ def _wire_label(cable, via_port) -> str:
     return ""
 
 
+def _twist_partners(cable, via_port):
+    """Other wire numbers twisted together with this wire (empty if none)."""
+    if not isinstance(via_port, int):
+        return []
+    for group in getattr(cable, "twisting", None) or []:
+        if via_port in group:
+            return [w for w in group if w != via_port]
+    return []
+
+
 def _ident_code(cable, via_port) -> str:
     """Numeric identifier for the wire's MIL-STD ident bands.
 
@@ -150,14 +161,21 @@ def build_cut_list(
 
     Rows are ordered by cable, then wire number, with the shield last.
     """
+    import dataclasses
+
     options = options or CutSheetOptions()
+    # the twist length factor applies only to wires that are actually twisted
+    plain_options = dataclasses.replace(options, twist_factor=0.0)
     rows: List[Dict[str, object]] = []
     for cable_name, cable in harness.cables.items():
         for conn in cable.connections:
             via = conn.via_port
             terminated = sum(1 for n in (conn.from_name, conn.to_name) if n is not None)
             wire_id = "s" if _is_shield(via) else via
-            length = compute_length(cable, terminated, options)
+            partners = _twist_partners(cable, via)
+            length = compute_length(
+                cable, terminated, options if partners else plain_options
+            )
             rows.append(
                 {
                     "wire": f"{cable_name}:{wire_id}",
@@ -172,6 +190,7 @@ def build_cut_list(
                     "length": _clean(length),
                     "unit": cable.length_unit or "",
                     "label": _wire_label(cable, via),
+                    "twist": ", ".join(str(p) for p in partners),
                     "ident": ident_string(_ident_code(cable, via)),
                     "ident_code": _ident_code(cable, via),
                     "_sort": (cable_name, 1 if _is_shield(via) else 0, via if isinstance(via, int) else 0),
@@ -202,6 +221,7 @@ _HEADERS = {
     "length": "Length",
     "unit": "Unit",
     "label": "Label",
+    "twist": "Twist",
     "ident": "Ident",
 }
 

@@ -142,6 +142,42 @@ def test_formatters_roundtrip():
     assert tsv.count("\n") == len(rows) + 1  # header + rows (+trailing)
 
 
+TWISTED = """
+connectors:
+  X1: {pincount: 3}
+  X2: {pincount: 3}
+cables:
+  W1:
+    wirecount: 3
+    length: 1
+    colors: [WH, BU, BK]
+    twisting: [[1, 2]]
+connections:
+  -
+    - X1: [1, 2, 3]
+    - W1: [1, 2, 3]
+    - X2: [1, 2, 3]
+"""
+
+
+def test_twist_column_shows_partners():
+    rows = build_cut_list(harness_of(TWISTED))
+    w1 = next(r for r in rows if r["wire"] == "W1:1")
+    w2 = next(r for r in rows if r["wire"] == "W1:2")
+    w3 = next(r for r in rows if r["wire"] == "W1:3")
+    assert w1["twist"] == "2" and w2["twist"] == "1"
+    assert w3["twist"] == ""  # not twisted
+
+
+def test_twist_factor_only_on_twisted_wires():
+    opts = CutSheetOptions(twist_factor=0.2)
+    rows = build_cut_list(harness_of(TWISTED), opts)
+    w1 = next(r for r in rows if r["wire"] == "W1:1")
+    w3 = next(r for r in rows if r["wire"] == "W1:3")
+    assert abs(w1["length"] - 1.2) < 1e-9  # twisted -> +20%
+    assert w3["length"] == 1  # untwisted -> unchanged
+
+
 def test_examples_produce_cut_lists():
     # every example with connections should yield a cut list without crashing
     for subdir in ("examples", "tutorial"):
