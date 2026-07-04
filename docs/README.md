@@ -34,11 +34,22 @@ WireViz is a tool for easily documenting cables, wiring harnesses and connector 
 
 ### Fork extensions
 
-This fork adds harness engineering, manufacturing, sourcing, and rendering
-features — design-rule checking (including ampacity and voltage drop), wire cut
-sheets, live DigiKey/Mouser BOM pricing, a native grid-snapped SVG renderer with
-2D component images, and a self-contained interactive HTML viewer. See
-[docs/FEATURES.md](FEATURES.md).
+This fork turns WireViz into a full harness-engineering tool, spanning design,
+verification, and the whole manufacturing chain:
+
+* **Design & render** — a native grid-snapped SVG renderer (no-overlap maze
+  routing, half-circle crossings), 2D connector CAD images, an interactive 2D
+  viewer, a three.js 3D viewer, and a connector-type / device library.
+* **Verify** — design-rule checking (structural + ampacity + voltage drop + mate
+  compatibility), electrical nets / continuity, and a minimum-gauge recommender.
+* **Manufacture** — wire cut sheets, MIL-STD-681F ident bands, wire markers, a
+  1:1 formboard (page-tiled) with DXF export, bundle/sleeve sizing, harness
+  weight, a cost/quote rollup, an assembly traveler, and an accessory BOM.
+* **Interop** — DigiKey/Mouser BOM sourcing, importers (from/to wire-list CSV and
+  KiCad netlist), a JSON layout export, a revision diff, and a one-file HTML
+  build **dossier** that packages it all.
+
+See [docs/FEATURES.md](FEATURES.md) for details and CLI usage.
 
 _Note_: WireViz is not designed to represent the complete wiring of a system. Its main aim is to document the construction of individual wires and harnesses.
 
