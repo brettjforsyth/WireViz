@@ -17,7 +17,10 @@
 - Native grid-snapped SVG renderer (`wv_svg`) — layered grid layout, orthogonal
   grid-aligned wires, 2D component images; no Graphviz dependency. CLI `--grid`.
 - Interactive, self-contained HTML viewer (`wv_viewer`) with pan/zoom/grid/hover;
-  JSON layout export. CLI `--viewer` / `--json`.
+  JSON layout export; plus a three.js 3D view. CLI `--viewer` / `--viewer3d` /
+  `--json`.
+- Device library (`wv_devices`): reusable ECU/relay/sensor templates that expand
+  from a `devices:` section into pre-labelled connectors. CLI `--list-devices`.
 
 ### Maintenance
 

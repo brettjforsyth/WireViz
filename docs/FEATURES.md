@@ -89,7 +89,29 @@ footprint/photo) in its node. No `dot` dependency. `build_layout()` /
 A single self-contained HTML file (no CDN, fonts, or external fetches — works
 offline) with pan, zoom, a snap-grid toggle, fit-to-view, and wire hover
 highlighting. The layout JSON is embedded, so the file is also a portable data
-carrier.
+carrier. `--viewer3d` additionally writes a three.js 3D view (orbit/zoom;
+needs internet for the CDN).
+
+## Device library (`wv_devices`)
+
+Reusable multi-connector device templates (a generic ECU, ISO relay, 3-wire
+sensor, power-distribution block) expand into connectors with pin labels
+pre-filled — the biggest time-saver from the commercial tools. Reference them
+in a `devices:` section:
+
+```yaml
+devices:
+  ECU1: generic_ecu_26     # -> connectors ECU1_A, ECU1_B
+  S1: sensor_3             # -> connector S1
+connections:
+  -
+    - ECU1_B: [TPS]
+    - W1: [1]
+    - S1: [SIG]
+```
+
+`wireviz --list-devices` prints the library; `register_device()` adds your own.
+Only generic pinouts ship (no proprietary manufacturer cavity maps).
 
 ## Still to come
 
