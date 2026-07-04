@@ -203,6 +203,10 @@ bundle diameter + recommended sleeve) to the console.
   ampacity derated by conductor count for wires bundled together.
 - **Pinout cards** (`wv_pinout`, `--pinout`) — a printable HTML card per
   connector: every pin with its label, wire, and destination.
+- **Drag-to-edit viewer** (`wv_editor`, `--editor`) — a browser editor that
+  renders the harness from data so you can drag connectors: nodes snap to the
+  grid, wires re-route live between the moved pins, and the edited layout
+  exports as JSON. Self-contained and offline.
 
 ## Still to come
 
