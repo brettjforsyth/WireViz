@@ -194,6 +194,48 @@ connections:
     assert not has_errors(findings)
 
 
+def test_mate_pincount_mismatch():
+    yml = """
+connectors:
+  X1: {pincount: 2}
+  X2: {pincount: 3}
+connections:
+  -
+    - X1
+    - ==>
+    - X2
+"""
+    assert "E-MATE-PINCOUNT" in codes(drc(yml))
+
+
+def test_mate_gender_same_warns():
+    yml = """
+connectors:
+  X1: {pincount: 1, gender: pin}
+  X2: {pincount: 1, gender: pin}
+connections:
+  -
+    - X1: [1]
+    - ==>
+    - X2: [1]
+"""
+    assert "W-MATE-GENDER" in codes(drc(yml))
+
+
+def test_mate_gender_opposing_ok():
+    yml = """
+connectors:
+  X1: {pincount: 1, gender: pin}
+  X2: {pincount: 1, gender: socket}
+connections:
+  -
+    - X1: [1]
+    - ==>
+    - X2: [1]
+"""
+    assert "W-MATE-GENDER" not in codes(drc(yml))
+
+
 if __name__ == "__main__":
     import traceback
 

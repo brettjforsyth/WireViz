@@ -366,6 +366,59 @@ def _voltage_drop(harness):
             )
 
 
+_MALE = {"pin", "plug", "male", "m"}
+_FEMALE = {"socket", "receptacle", "female", "f", "jack"}
+
+
+def _gender_class(g):
+    g = (g or "").strip().lower()
+    if g in _MALE:
+        return "male"
+    if g in _FEMALE:
+        return "female"
+    return None
+
+
+@rule("E-MATE-PINCOUNT")
+def _mate_pincount(harness):
+    """Two whole-component-mated connectors must have equal pin counts."""
+    for mate in harness.mates:
+        if not isinstance(mate, MateComponent):
+            continue
+        a = harness.connectors.get(mate.from_name)
+        b = harness.connectors.get(mate.to_name)
+        if a and b and a.pincount != b.pincount:
+            yield DRCFinding(
+                Severity.ERROR,
+                "E-MATE-PINCOUNT",
+                f"mated connectors {mate.from_name} ({a.pincount}p) and "
+                f"{mate.to_name} ({b.pincount}p) have different pin counts",
+                mate.from_name,
+            )
+
+
+@rule("W-MATE-GENDER")
+def _mate_gender(harness):
+    """Mated connectors should have opposing genders (one male, one female).
+
+    Only active when both connectors declare a gender.
+    """
+    for mate in harness.mates:
+        a = harness.connectors.get(getattr(mate, "from_name", None))
+        b = harness.connectors.get(getattr(mate, "to_name", None))
+        if not a or not b:
+            continue
+        ga, gb = _gender_class(a.gender), _gender_class(b.gender)
+        if ga and gb and ga == gb:
+            yield DRCFinding(
+                Severity.WARNING,
+                "W-MATE-GENDER",
+                f"mated connectors {a.name} and {b.name} are both {ga}; "
+                f"mating faces should have opposing genders",
+                a.name,
+            )
+
+
 # --- runner ----------------------------------------------------------------
 
 
