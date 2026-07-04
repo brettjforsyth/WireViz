@@ -379,15 +379,19 @@ def _wire_path(wire: dict, index: int, verts, cfg: GridConfig) -> str:
     for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
         if y1 == y2 and x1 != x2:  # horizontal segment: insert hops
             step = 1 if x2 > x1 else -1
+            lo, hi = min(x1, x2), max(x1, x2)
             crossings = [
                 vx
                 for (vi, vx, vy1, vy2) in verts
                 if vi != index
-                # strict x: the horizontal passes over the vertical (doesn't
-                # merely end at it, which is a corner); inclusive y catches a
-                # crossing that grazes the vertical's top or bottom tip.
-                and min(x1, x2) < vx < max(x1, x2)
-                and vy1 <= y1 <= vy2
+                # A hop is only for a true mid-span crossing:
+                #  - the vertical must pass *strictly through* the horizontal
+                #    (vy1 < y < vy2), so a vertical that merely starts or ends
+                #    at this y — i.e. another wire's corner/T — is never hopped;
+                #  - the crossing must clear this wire's own ends by a hop
+                #    radius, so a hop never sits on top of a corner.
+                and lo + r < vx < hi - r
+                and vy1 < y1 < vy2
             ]
             crossings.sort(reverse=(step < 0))
             sweep = 1 if step > 0 else 0

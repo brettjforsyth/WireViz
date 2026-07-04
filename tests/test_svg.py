@@ -10,7 +10,13 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from wireviz import wireviz  # noqa: E402
-from wireviz.wv_svg import GridConfig, build_layout, render_svg  # noqa: E402
+from wireviz.wv_svg import (  # noqa: E402
+    GridConfig,
+    _vertical_segments,
+    _wire_path,
+    build_layout,
+    render_svg,
+)
 
 BASIC = """
 connectors:
@@ -98,22 +104,36 @@ connections:
     assert len(set(from_corridor)) == len(from_corridor), "channels overlap"
 
 
-def test_crossing_produces_arc_hop():
-    # swap the mapping so wires cross -> at least one half-circle hop (arc "A")
-    yml = """
-connectors:
-  X1: {pincount: 2}
-  X2: {pincount: 2}
-cables:
-  W1: {wirecount: 2}
-connections:
-  -
-    - X1: [1, 2]
-    - W1: [1, 2]
-    - X2: [2, 1]
-"""
-    svg = render_svg(harness_of(yml))
-    assert " A " in svg, "expected an arc hop at the wire crossing"
+def _h(points):
+    return {"cable": "W", "wire": 1, "color": "#000000", "points": points}
+
+
+def test_hop_at_true_interior_crossing():
+    cfg = GridConfig()
+    horizontal = _h([(0, 50), (100, 50)])
+    vertical = _h([(50, 0), (50, 100)])  # passes strictly through at (50, 50)
+    verts = _vertical_segments([horizontal, vertical])
+    assert " A " in _wire_path(horizontal, 0, verts, cfg)
+
+
+def test_no_hop_at_corner():
+    # the vertical STARTS at the horizontal's y (a corner / T-junction of
+    # another wire) -> must never hop there.
+    cfg = GridConfig()
+    horizontal = _h([(0, 50), (100, 50)])
+    corner_vertical = _h([(50, 50), (50, 120)])  # top endpoint sits on y=50
+    verts = _vertical_segments([horizontal, corner_vertical])
+    assert " A " not in _wire_path(horizontal, 0, verts, cfg)
+
+
+def test_no_hop_next_to_own_corner():
+    # a crossing within a hop radius of the horizontal's own end -> skipped so
+    # the hop never collides with this wire's corner.
+    cfg = GridConfig()
+    horizontal = _h([(0, 50), (100, 50)])
+    near_end = _h([(cfg.hop_radius, 0), (cfg.hop_radius, 100)])
+    verts = _vertical_segments([horizontal, near_end])
+    assert " A " not in _wire_path(horizontal, 0, verts, cfg)
 
 
 def test_no_spurious_hops_when_no_crossings():
