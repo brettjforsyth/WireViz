@@ -13,6 +13,7 @@ if __name__ == "__main__":
 import wireviz.wireviz as wv
 from wireviz import APP_NAME, __version__
 from wireviz.wv_helper import file_read_text
+from wireviz.wv_connectors import apply_connector_types, list_connectors
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
 from wireviz.wv_devices import expand_devices, list_devices
 from wireviz.wv_drc import format_report, has_errors, run_drc
@@ -35,6 +36,18 @@ format_codes = {
     "s": "svg",
     "t": "tsv",
 }
+
+def _wants_preprocess(data: dict) -> bool:
+    """True if the harness uses the device library or a connector_type."""
+    if "devices" in data:
+        return True
+    if (data.get("options") or {}).get("connector_type"):
+        return True
+    for attrs in (data.get("connectors") or {}).values():
+        if isinstance(attrs, dict) and attrs.get("connector_type"):
+            return True
+    return False
+
 
 epilog = "The -f or --format option accepts a string containing one or more of the "
 epilog += "following characters to specify which file types to output:\n"
@@ -132,11 +145,26 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     "Needs DIGIKEY_CLIENT_ID/SECRET or MOUSER_API_KEY in the environment.",
 )
 @click.option(
+    "--cad-dir",
+    "cad_dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False),
+    help="Directory of connector CAD assets (<connector_type>.png/.glb, ...) "
+    "used by the grid/viewer/3D outputs.",
+)
+@click.option(
     "--list-devices",
     "list_devices_flag",
     is_flag=True,
     default=False,
     help="List the built-in device library and exit.",
+)
+@click.option(
+    "--list-connectors",
+    "list_connectors_flag",
+    is_flag=True,
+    default=False,
+    help="List the built-in connector-type library and exit.",
 )
 @click.option(
     "-V",
@@ -159,7 +187,9 @@ def wireviz(
     json_out,
     cutsheet,
     source,
+    cad_dir,
     list_devices_flag,
+    list_connectors_flag,
     version,
 ):
     """
@@ -173,6 +203,11 @@ def wireviz(
         print("\nAvailable devices (reference under a 'devices:' section):")
         for name, desc in list_devices():
             print(f"  {name:20} {desc}")
+        return
+    if list_connectors_flag:
+        print("\nConnector types (set 'connector_type:' on a connector):")
+        for name, desc in list_connectors():
+            print(f"  {name:22} {desc}")
         return
 
     # get list of files
@@ -237,16 +272,16 @@ def wireviz(
         for p in prepend:
             image_paths.add(Path(p).parent)
 
-        # Expand any device-library references into connectors before parsing.
-        # Only switch to the dict path when a `devices:` section is present, to
-        # keep behaviour identical for files that don't use the library.
+        # Expand device-library references and back-fill connector-type
+        # metadata before parsing. Only switch to the dict path when one of
+        # those features is actually used, so behaviour is identical otherwise.
         harness_input = yaml_input
         try:
             probe = yaml.safe_load(yaml_input)
         except Exception:  # noqa: BLE001 - let parse report YAML errors
             probe = None
-        if isinstance(probe, dict) and "devices" in probe:
-            harness_input = expand_devices(probe)
+        if isinstance(probe, dict) and _wants_preprocess(probe):
+            harness_input = apply_connector_types(expand_devices(probe))
 
         # Parse once to the model; the extra features below run on it directly
         # and need no `dot` binary, so a missing Graphviz can't block them.
@@ -291,28 +326,30 @@ def wireviz(
             out.write_text(sourced_to_csv(lines))
             print("Sourced BOM: ", out)
 
+        _cad = str(cad_dir) if cad_dir else None
+
         # Native grid-snapped SVG (independent of Graphviz)
         if grid:
             out = output_base.with_suffix(".grid.svg")
-            out.write_text(render_svg(harness))
+            out.write_text(render_svg(harness, cad_dir=_cad))
             print("Grid SVG:    ", out)
 
         # Interactive HTML viewer (self-contained)
         if viewer:
             out = output_base.with_suffix(".viewer.html")
-            out.write_text(render_html(harness))
+            out.write_text(render_html(harness, cad_dir=_cad))
             print("Viewer:      ", out)
 
         # Interactive 3D viewer (three.js from CDN)
         if viewer3d:
             out = output_base.with_suffix(".viewer3d.html")
-            out.write_text(render_html_3d(harness))
+            out.write_text(render_html_3d(harness, cad_dir=_cad))
             print("3D viewer:   ", out)
 
         # Layout JSON
         if json_out:
             out = output_base.with_suffix(".layout.json")
-            out.write_text(export_json(harness))
+            out.write_text(export_json(harness, cad_dir=_cad))
             print("Layout JSON: ", out)
 
         # Standard Graphviz-backed outputs last (these need the `dot` binary)

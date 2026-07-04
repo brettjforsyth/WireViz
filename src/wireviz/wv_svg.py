@@ -25,6 +25,7 @@ from html import escape
 from typing import Dict, List, Optional, Tuple
 
 from wireviz.wv_colors import get_color_hex
+from wireviz.wv_connectors import resolve_connector_assets
 
 
 @dataclass
@@ -106,17 +107,40 @@ def _node_pins(harness, name) -> List[Tuple[object, str]]:
     return rows
 
 
-def _node_image(harness, name) -> Optional[str]:
-    """Return a connector's image src, if it has one."""
+def _node_assets(harness, name, cad_dir=None, image_provider=None):
+    """Resolve a connector's 2D image and 3D model.
+
+    An explicit ``image:`` on the connector wins for the 2D image; otherwise
+    the connector's ``connector_type`` is resolved against the CAD library.
+    Returns ``(image_2d, model_3d)``, either of which may be None.
+    """
     conn = harness.connectors.get(name)
-    if conn is not None and getattr(conn, "image", None):
+    if conn is None:
+        return None, None
+    image_2d = None
+    if getattr(conn, "image", None):
         src = getattr(conn.image, "src", None)
-        return str(src) if src is not None else None
-    return None
+        image_2d = str(src) if src is not None else None
+    ctype = getattr(conn, "connector_type", None)
+    model_3d = None
+    if ctype:
+        assets = resolve_connector_assets(ctype, cad_dir, image_provider)
+        image_2d = image_2d or assets.image_2d
+        model_3d = assets.model_3d
+    return image_2d, model_3d
 
 
-def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
-    """Compute a grid-snapped layout dict (also the JSON feed for 3D)."""
+def build_layout(
+    harness,
+    config: Optional[GridConfig] = None,
+    cad_dir: Optional[str] = None,
+    image_provider=None,
+) -> dict:
+    """Compute a grid-snapped layout dict (also the JSON feed for 3D).
+
+    ``cad_dir`` / ``image_provider`` are passed to the connector-type CAD
+    resolver so each connector node carries its resolved 2D image and 3D model.
+    """
     cfg = config or GridConfig()
     layer = _assign_layers(harness)
     order = list(harness.connectors.keys()) + list(harness.cables.keys())
@@ -134,7 +158,7 @@ def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
         col_width = cfg.node_width
         for name in columns[col]:
             pins = _node_pins(harness, name)
-            image = _node_image(harness, name)
+            image, model_3d = _node_assets(harness, name, cad_dir, image_provider)
             height = cfg.header + max(len(pins), 1) * cfg.pin_pitch
             if image:
                 height += cfg.image_band
@@ -162,6 +186,8 @@ def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
                     "src": image,
                     "y": cfg.snap(y + cfg.header + len(pins) * cfg.pin_pitch),
                 }
+            if model_3d:
+                node["model_3d"] = model_3d
             nodes[name] = node
             y = y + height + cfg.node_gap
             max_bottom = max(max_bottom, y)
@@ -389,10 +415,15 @@ def _wire_svg(wire: dict, index: int, verts, cfg: GridConfig) -> str:
     )
 
 
-def render_svg(harness, config: Optional[GridConfig] = None) -> str:
+def render_svg(
+    harness,
+    config: Optional[GridConfig] = None,
+    cad_dir: Optional[str] = None,
+    image_provider=None,
+) -> str:
     """Render `harness` to a standalone SVG string with grid-snapped wires."""
     cfg = config or GridConfig()
-    layout = build_layout(harness, cfg)
+    layout = build_layout(harness, cfg, cad_dir, image_provider)
     w, h = layout["width"], layout["height"]
     verts = _vertical_segments(layout["wires"])
     body = [
@@ -411,14 +442,20 @@ def render_svg(harness, config: Optional[GridConfig] = None) -> str:
     return "\n".join(body) + "\n"
 
 
-def export_json(harness, config: Optional[GridConfig] = None, indent: int = 2) -> str:
+def export_json(
+    harness,
+    config: Optional[GridConfig] = None,
+    indent: int = 2,
+    cad_dir: Optional[str] = None,
+    image_provider=None,
+) -> str:
     """Serialize the grid layout plus harness metadata to JSON.
 
     This is the machine-readable feed for the interactive/3D viewer and for
     interop; it is intentionally renderer-neutral (positions + connectivity +
     per-component metadata), not tied to the SVG output.
     """
-    layout = build_layout(harness, config)
+    layout = build_layout(harness, config, cad_dir, image_provider)
     meta = {
         "title": harness.metadata.get("title") if harness.metadata else None,
         "connectors": len(harness.connectors),

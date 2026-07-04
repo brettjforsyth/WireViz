@@ -107,6 +107,32 @@ def test_register_and_parse_into_harness():
     assert harness.connectors["X1"].connector_type == "test_conn_2"
 
 
+def test_renderer_uses_resolved_assets(tmp_path):
+    from wireviz.wv_svg import build_layout, render_svg
+
+    # provide a real image (a 1x1 PNG) and a fake model named for the type
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+        "890000000d4944415478da6360000002000154a24f480000000049454e44ae42"
+        "6082"
+    )
+    (tmp_path / "dsub_9.png").write_bytes(png)
+    (tmp_path / "dsub_9.glb").write_bytes(b"fake-gltf")
+    data = {
+        "connectors": {"X1": {"connector_type": "dsub_9"}, "X2": {"pincount": 9}},
+        "cables": {"W1": {"wirecount": 1}},
+        "connections": [[{"X1": [1]}, {"W1": [1]}, {"X2": [1]}]],
+    }
+    harness = wireviz.parse(apply_connector_types(data), return_types="harness")
+    lay = build_layout(harness, cad_dir=str(tmp_path))
+    assert lay["nodes"]["X1"]["image"]["src"].endswith("dsub_9.png")
+    assert lay["nodes"]["X1"]["model_3d"].endswith("dsub_9.glb")
+    # X1 got its pin count (9) from the library, not stated explicitly
+    assert len(harness.connectors["X1"].pins) == 9
+    svg = render_svg(harness, cad_dir=str(tmp_path))
+    assert "<image " in svg
+
+
 if __name__ == "__main__":
     import tempfile
     import traceback

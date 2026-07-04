@@ -68,6 +68,44 @@ connections:
     assert "E-WIRE-RANGE" in result.output
 
 
+def test_cli_list_connectors():
+    result = run(["--list-connectors"])
+    assert result.exit_code == 0
+    assert "deutsch_dt_4" in result.output
+
+
+def test_cli_connector_type_with_cad_dir(tmp_path):
+    cad = tmp_path / "cad"
+    cad.mkdir()
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4"
+        "890000000d4944415478da6360000002000154a24f480000000049454e44ae42"
+        "6082"
+    )
+    (cad / "dsub_9.png").write_bytes(png)
+    harness = tmp_path / "h.yml"
+    harness.write_text(
+        """
+connectors:
+  X1: {connector_type: dsub_9}
+  X2: {pincount: 9}
+cables:
+  W1: {wirecount: 1}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+    )
+    result = run(
+        [str(harness), "-f", "", "--no-drc", "--grid", "--cad-dir", str(cad), "-o", str(tmp_path)]
+    )
+    assert result.exit_code == 0, result.output
+    svg = (tmp_path / "h.grid.svg").read_text()
+    assert "<image " in svg  # the connector CAD image was pulled in
+
+
 def test_cli_no_features_still_runs(tmp_path):
     # with --no-drc and no feature flags and no graphviz formats, it should
     # still complete cleanly (nothing to do)

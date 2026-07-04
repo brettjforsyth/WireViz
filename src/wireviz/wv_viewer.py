@@ -99,14 +99,18 @@ _SCRIPT = """
 
 
 def render_html(
-    harness, config: Optional[GridConfig] = None, title: Optional[str] = None
+    harness,
+    config: Optional[GridConfig] = None,
+    title: Optional[str] = None,
+    cad_dir: Optional[str] = None,
+    image_provider=None,
 ) -> str:
     """Return a standalone interactive HTML viewer for `harness`."""
     cfg = config or GridConfig()
-    svg = render_svg(harness, cfg)
+    svg = render_svg(harness, cfg, cad_dir, image_provider)
     # give the <svg> an id so the viewer script can drive its viewBox
     svg = svg.replace("<svg ", '<svg id="harness-svg" ', 1)
-    layout_json = export_json(harness, cfg, indent=0)
+    layout_json = export_json(harness, cfg, indent=0, cad_dir=cad_dir, image_provider=image_provider)
     if title is None:
         title = (harness.metadata.get("title") if harness.metadata else None) or "Harness"
 
@@ -146,6 +150,9 @@ _THREE_CDN = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
 _ORBIT_CDN = (
     "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"
 )
+_GLTF_CDN = (
+    "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"
+)
 
 _SCRIPT_3D = """
 (function () {
@@ -168,13 +175,28 @@ _SCRIPT_3D = """
   scene.add(new THREE.GridHelper(Math.max(W, H) * 2, 40, 0x555555, 0x333333));
   // map 2D layout (x right, y down) to 3D (x, z); extrude up in y
   const cx = W / 2, cz = H / 2, BOX = 30;
+  const loader = (typeof THREE.GLTFLoader === 'function')
+    ? new THREE.GLTFLoader() : null;
   for (const name in DATA.nodes) {
     const n = DATA.nodes[name];
+    const px = n.x + n.w / 2 - cx, pz = n.y + n.h / 2 - cz;
+    if (n.model_3d && loader) {
+      // load the connector's CAD model and drop it in at the node position
+      loader.load(n.model_3d, (gltf) => {
+        const obj = gltf.scene;
+        obj.position.set(px, BOX / 2, pz);
+        scene.add(obj);
+      }, undefined, () => addBox(n, px, pz));  // fall back to a box on error
+    } else {
+      addBox(n, px, pz);
+    }
+  }
+  function addBox(n, px, pz) {
     const geo = new THREE.BoxGeometry(n.w, BOX, n.h);
     const color = n.kind === 'connector' ? 0x4a78d0 : 0x888888;
     const mesh = new THREE.Mesh(geo,
       new THREE.MeshLambertMaterial({ color }));
-    mesh.position.set(n.x + n.w / 2 - cx, BOX / 2, n.y + n.h / 2 - cz);
+    mesh.position.set(px, BOX / 2, pz);
     scene.add(mesh);
   }
   const WY = BOX + 8;
@@ -215,16 +237,23 @@ body { margin: 0; background: #1e1e1e; color: #eee;
 
 
 def render_html_3d(
-    harness, config: Optional[GridConfig] = None, title: Optional[str] = None
+    harness,
+    config: Optional[GridConfig] = None,
+    title: Optional[str] = None,
+    cad_dir: Optional[str] = None,
+    image_provider=None,
 ) -> str:
     """Return an interactive three.js 3D viewer for `harness`.
 
     Requires internet the first time it is opened (three.js is loaded from a
-    CDN). Components render as 3D blocks and wires as lines routed in 3D on the
-    same grid layout as the 2D renderer.
+    CDN). Components render as 3D blocks — or, where a connector's
+    ``connector_type`` resolves to a glTF model, as the loaded CAD model — and
+    wires as lines routed in 3D on the same grid layout as the 2D renderer.
     """
     cfg = config or GridConfig()
-    layout_json = export_json(harness, cfg, indent=0)
+    layout_json = export_json(
+        harness, cfg, indent=0, cad_dir=cad_dir, image_provider=image_provider
+    )
     if title is None:
         title = (harness.metadata.get("title") if harness.metadata else None) or "Harness 3D"
 
@@ -245,6 +274,7 @@ def render_html_3d(
 <div id="stage3d"><noscript class="nowebgl">Enable JavaScript to view the 3D harness.</noscript></div>
 <script src="{_THREE_CDN}"></script>
 <script src="{_ORBIT_CDN}"></script>
+<script src="{_GLTF_CDN}"></script>
 <script>const DATA = {layout_json};</script>
 <script>{_SCRIPT_3D}</script>
 </body>
