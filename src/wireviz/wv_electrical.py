@@ -154,3 +154,58 @@ def ampacity_margin(current: float, gauge, unit) -> Optional[float]:
     if not amp:
         return None
     return current / amp
+
+
+def _awg_label(awg: int) -> str:
+    """Human AWG label: 0 -> '1/0', -1 -> '2/0', 4 -> '4'."""
+    if awg <= 0:
+        return f"{1 - awg}/0"
+    return str(awg)
+
+
+def recommend_gauge(
+    current: float,
+    length_m: float,
+    max_drop_v: Optional[float] = None,
+    conductors: int = 2,
+    derating: float = 1.0,
+    table: Optional[Dict[float, float]] = None,
+):
+    """Recommend the thinnest AWG that carries `current` within ampacity (times
+    `derating`) and, if `max_drop_v` is given, within the voltage-drop budget
+    over `length_m` (round trip by default, conductors=2).
+
+    Returns ``{"awg", "label", "ampacity", "drop_v", "limited_by"}`` for the
+    chosen gauge, or the thickest available if nothing fully qualifies.
+    """
+    table = table or AWG_CHASSIS_AMPACITY
+    # thinnest (largest AWG number) to thickest
+    order = sorted(table.keys(), reverse=True)
+    thickest = order[-1]
+    best_fallback = None
+    for awg in order:
+        amp = table[awg] * derating
+        drop = voltage_drop(current, str(_awg_label(awg)), "AWG", length_m, conductors)
+        ampacity_ok = current <= amp
+        drop_ok = max_drop_v is None or (drop is not None and drop <= max_drop_v)
+        if ampacity_ok and drop_ok:
+            return {
+                "awg": awg,
+                "label": _awg_label(awg),
+                "ampacity": round(amp, 1),
+                "drop_v": round(drop, 4) if drop is not None else None,
+                "limited_by": None,
+            }
+        if best_fallback is None and ampacity_ok:
+            best_fallback = awg  # carries current but fails drop
+    # nothing satisfied both: return thickest, noting the binding constraint
+    awg = thickest
+    drop = voltage_drop(current, str(_awg_label(awg)), "AWG", length_m, conductors)
+    limited = "voltage-drop" if best_fallback is not None else "ampacity"
+    return {
+        "awg": awg,
+        "label": _awg_label(awg),
+        "ampacity": round(table[awg] * derating, 1),
+        "drop_v": round(drop, 4) if drop is not None else None,
+        "limited_by": limited,
+    }

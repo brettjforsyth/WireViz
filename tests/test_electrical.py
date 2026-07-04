@@ -15,6 +15,7 @@ from wireviz.wv_electrical import (  # noqa: E402
     ampacity_margin,
     area_to_awg,
     awg_area_mm2,
+    recommend_gauge,
     resistance_per_m,
     voltage_drop,
 )
@@ -131,6 +132,29 @@ def test_voltage_drop_ok_when_short():
     # 10 A, 18 AWG, 0.5 m, 12 V -> ~0.1 V < 5%
     c = codes(drc(_cable_yml(current=10, voltage=12, length=0.5)))
     assert "W-VDROP" not in c
+
+
+def test_recommend_gauge_ampacity_driven():
+    # 30 A over a short run, no drop limit -> thinnest gauge with ampacity >= 30
+    # 14 AWG is ~32 A (12 AWG ~41 A is thicker/overkill)
+    r = recommend_gauge(30, 1.0)
+    assert r["awg"] == 14
+    assert r["ampacity"] >= 30
+
+
+def test_recommend_gauge_voltage_drop_driven():
+    # small current but a long run with a tight drop budget forces a thicker
+    # gauge than ampacity alone would need
+    loose = recommend_gauge(5, 1.0)
+    tight = recommend_gauge(5, 10.0, max_drop_v=0.2, conductors=2)
+    assert tight["awg"] < loose["awg"]  # thicker (smaller AWG number)
+    assert tight["drop_v"] <= 0.2
+
+
+def test_recommend_gauge_reports_limit_when_impossible():
+    # absurd current beyond the thickest gauge -> flagged ampacity-limited
+    r = recommend_gauge(1000, 1.0)
+    assert r["limited_by"] == "ampacity"
 
 
 def test_examples_still_clean_with_electrical_rules():
