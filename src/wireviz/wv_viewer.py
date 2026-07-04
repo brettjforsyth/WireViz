@@ -199,12 +199,21 @@ _SCRIPT_3D = """
     mesh.position.set(px, BOX / 2, pz);
     scene.add(mesh);
   }
-  const WY = BOX + 8;
+  // wires as colored tubes that follow the routed orthogonal path, lifted
+  // above the connectors and staggered in height so a bundle reads in 3D
+  const WY = BOX + 10;
+  let wi = 0;
   for (const w of DATA.wires) {
-    const pts = w.points.map(p => new THREE.Vector3(p[0] - cx, WY, p[1] - cz));
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const col = new THREE.Color(w.color || '#000000');
-    scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: col })));
+    const raw = w.points;
+    if (raw.length >= 2) {
+      const hy = WY + (wi % 8) * 1.3;
+      const pts = raw.map(p => new THREE.Vector3(p[0] - cx, hy, p[1] - cz));
+      const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0);
+      const geo = new THREE.TubeGeometry(curve, Math.max(8, pts.length * 4), 1.4, 6, false);
+      const col = new THREE.Color(w.color || '#222222');
+      scene.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: col })));
+    }
+    wi++;
   }
   function resize() {
     camera.aspect = el.clientWidth / el.clientHeight;
