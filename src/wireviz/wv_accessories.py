@@ -102,7 +102,8 @@ def _expand(name, host_kind, host, spec) -> Optional[AccessoryLine]:
     is_covering = t.lower() in COVERING_TYPES or per == "length"
     unit = spec.get("unit")
     if unit is None:
-        unit = getattr(host, "length_unit", None) or "m" if is_covering else "ea"
+        # length unit only for coverings; discrete accessories are 'ea'
+        unit = (getattr(host, "length_unit", None) or "m") if is_covering else "ea"
     return AccessoryLine(
         host=name,
         host_kind=host_kind,

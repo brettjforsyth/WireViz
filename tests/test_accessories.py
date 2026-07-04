@@ -102,6 +102,26 @@ connections:
     assert line(lines, "W1", "heatshrink").qty == 2
 
 
+def test_cable_discrete_accessory_is_each_not_length():
+    # regression: a non-covering accessory on a cable must be 'ea', not 'm'
+    yml = """
+connectors: {X1: {pincount: 1}, X2: {pincount: 1}}
+cables:
+  W1:
+    wirecount: 1
+    length: 2
+    accessories:
+      - {type: backshell, per: connector, qty: 1, mpn: BS}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+    bs = line(derive_accessories(h(yml)), "W1", "backshell")
+    assert bs.unit == "ea" and bs.category == "accessory"
+
+
 def test_tsv_renders():
     t = to_tsv(accessory_bom(h()))
     assert "Category\tType" in t
