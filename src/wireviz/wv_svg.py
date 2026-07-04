@@ -40,6 +40,10 @@ class GridConfig:
     margin: int = 40
     image_band: int = 90  # vertical space reserved for a component image
     show_grid: bool = True
+    channel_gap: int = 4  # centre-to-centre spacing of parallel wire runs
+    hop_radius: int = 2  # radius of the half-circle where wires cross
+    wire_core: float = 1.5  # coloured wire width
+    wire_casing: float = 3.0  # dark casing width under the colour
 
     def snap(self, v: float) -> int:
         return int(round(v / self.pitch) * self.pitch)
@@ -182,9 +186,39 @@ def build_layout(harness, config: Optional[GridConfig] = None) -> dict:
             if seg:
                 wires.append({"cable": cname, "wire": vport, "color": color_hex, "points": seg})
 
+    _assign_channels(wires, cfg)
+
     width = cfg.snap(col_x - cfg.col_gap + cfg.margin)
     height = cfg.snap(max_bottom + cfg.margin)
     return {"config": cfg.__dict__, "nodes": nodes, "wires": wires, "width": width, "height": height}
+
+
+def _assign_channels(wires: List[dict], cfg: GridConfig) -> None:
+    """Spread the vertical run of each wire so parallel wires sit side by side.
+
+    All wires whose vertical middle run shares an x (i.e. run through the same
+    corridor between two columns) are given a distinct x offset, `channel_gap`
+    apart and centred on the original channel, so they no longer stack on top
+    of each other. Ordered by run midpoint height to reduce self-crossings.
+    Mutates each wire's `points` in place.
+    """
+    from collections import defaultdict
+
+    corridors: Dict[int, List[dict]] = defaultdict(list)
+    for w in wires:
+        pts = w["points"]
+        if len(pts) >= 4 and pts[1][0] == pts[2][0]:
+            corridors[pts[1][0]].append(w)
+    for group in corridors.values():
+        group.sort(key=lambda w: (w["points"][1][1] + w["points"][2][1]) / 2)
+        n = len(group)
+        if n < 2:
+            continue
+        for i, w in enumerate(group):
+            offset = int(round((i - (n - 1) / 2) * cfg.channel_gap))
+            pts = w["points"]
+            pts[1] = (pts[1][0] + offset, pts[1][1])
+            pts[2] = (pts[2][0] + offset, pts[2][1])
 
 
 def _pin_y(node: dict, pin_id) -> Optional[int]:
@@ -295,18 +329,63 @@ def _node_svg(node: dict, cfg: GridConfig) -> str:
     return "".join(parts)
 
 
-def _wire_svg(wire: dict) -> str:
-    pts = " ".join(f"{px},{py}" for px, py in wire["points"])
+def _vertical_segments(wires: List[dict]):
+    """Collect (wire_index, x, ymin, ymax) for every vertical wire segment."""
+    verts = []
+    for idx, w in enumerate(wires):
+        pts = w["points"]
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+            if x1 == x2 and y1 != y2:
+                verts.append((idx, x1, min(y1, y2), max(y1, y2)))
+    return verts
+
+
+def _wire_path(wire: dict, index: int, verts, cfg: GridConfig) -> str:
+    """Build an SVG path `d` for a wire, hopping over crossed vertical wires.
+
+    Each horizontal segment draws a small half-circle where it crosses another
+    wire's vertical run (the standard "wire crossing" convention). Only the
+    horizontal wire hops, so every crossing gets exactly one hop.
+    """
+    pts = wire["points"]
+    r = cfg.hop_radius
+    d = [f"M {pts[0][0]} {pts[0][1]}"]
+    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
+        if y1 == y2 and x1 != x2:  # horizontal segment: insert hops
+            step = 1 if x2 > x1 else -1
+            crossings = [
+                vx
+                for (vi, vx, vy1, vy2) in verts
+                if vi != index
+                # strict x: the horizontal passes over the vertical (doesn't
+                # merely end at it, which is a corner); inclusive y catches a
+                # crossing that grazes the vertical's top or bottom tip.
+                and min(x1, x2) < vx < max(x1, x2)
+                and vy1 <= y1 <= vy2
+            ]
+            crossings.sort(reverse=(step < 0))
+            sweep = 1 if step > 0 else 0
+            for vx in crossings:
+                d.append(f"L {vx - r * step} {y1}")
+                d.append(f"A {r} {r} 0 0 {sweep} {vx + r * step} {y1}")
+            d.append(f"L {x2} {y2}")
+        else:  # vertical (or degenerate) segment
+            d.append(f"L {x2} {y2}")
+    return " ".join(d)
+
+
+def _wire_svg(wire: dict, index: int, verts, cfg: GridConfig) -> str:
+    path = _wire_path(wire, index, verts, cfg)
     color = wire["color"] or "#000000"
     key = escape(f"{wire['cable']}:{wire['wire']}")
     # dark casing underneath so light-coloured wires stay visible on any bg
     return (
-        f'<polyline class="wire" data-wire="{key}" points="{pts}" fill="none" '
-        f'stroke="#222" stroke-width="3.5" '
+        f'<path class="wire" data-wire="{key}" d="{path}" fill="none" '
+        f'stroke="#222" stroke-width="{cfg.wire_casing}" '
         f'stroke-linejoin="round" stroke-linecap="round"/>'
-        f'<polyline class="wire-core" data-wire="{key}" points="{pts}" '
-        f'fill="none" stroke="{color}" '
-        f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+        f'<path class="wire-core" data-wire="{key}" d="{path}" fill="none" '
+        f'stroke="{color}" stroke-width="{cfg.wire_core}" '
+        f'stroke-linejoin="round" stroke-linecap="round"/>'
     )
 
 
@@ -315,13 +394,14 @@ def render_svg(harness, config: Optional[GridConfig] = None) -> str:
     cfg = config or GridConfig()
     layout = build_layout(harness, cfg)
     w, h = layout["width"], layout["height"]
+    verts = _vertical_segments(layout["wires"])
     body = [
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'xmlns:xlink="http://www.w3.org/1999/xlink" '
         f'width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
         _svg_grid(w, h, cfg),
         '<g class="wires">',
-        *[_wire_svg(wire) for wire in layout["wires"]],
+        *[_wire_svg(wire, i, verts, cfg) for i, wire in enumerate(layout["wires"])],
         "</g>",
         '<g class="nodes">',
         *[_node_svg(node, cfg) for node in layout["nodes"].values()],

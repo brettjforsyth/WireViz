@@ -44,7 +44,7 @@ def test_layering_left_to_right():
     assert cols["X1"] < cols["W1"] < cols["X2"]
 
 
-def test_all_coordinates_snap_to_grid():
+def test_nodes_and_wire_endpoints_snap_to_grid():
     cfg = GridConfig(pitch=10)
     lay = build_layout(harness_of(BASIC), cfg)
     for node in lay["nodes"].values():
@@ -52,8 +52,10 @@ def test_all_coordinates_snap_to_grid():
             assert node[key] % cfg.pitch == 0
         for pin in node["pins"]:
             assert pin["y"] % cfg.pitch == 0
+    # wire endpoints land on pins/wire-rows and stay on the grid; the middle
+    # vertical run is intentionally offset into its own channel.
     for wire in lay["wires"]:
-        for x, y in wire["points"]:
+        for x, y in (wire["points"][0], wire["points"][-1]):
             assert x % cfg.pitch == 0 and y % cfg.pitch == 0
 
 
@@ -70,9 +72,66 @@ def test_grid_pitch_changes_geometry():
     small = build_layout(harness_of(BASIC), GridConfig(pitch=10))
     big = build_layout(harness_of(BASIC), GridConfig(pitch=25, pin_pitch=50))
     assert big["height"] != small["height"]
-    for wire in big["wires"]:
-        for x, y in wire["points"]:
-            assert x % 25 == 0 and y % 25 == 0
+    for node in big["nodes"].values():
+        assert node["x"] % 25 == 0 and node["y"] % 25 == 0
+
+
+def test_parallel_wires_get_distinct_channels():
+    # three wires from X1 to W1 share a corridor; their vertical runs must not
+    # stack on the same x.
+    yml = """
+connectors:
+  X1: {pincount: 3}
+  X2: {pincount: 3}
+cables:
+  W1: {wirecount: 3}
+connections:
+  -
+    - X1: [1, 2, 3]
+    - W1: [1, 2, 3]
+    - X2: [1, 2, 3]
+"""
+    lay = build_layout(harness_of(yml))
+    # gather the vertical-run x of the X1->W1 (from) segments
+    xs = [w["points"][1][0] for w in lay["wires"] if w["points"][1][0] == w["points"][2][0]]
+    from_corridor = [x for x in xs if x < lay["nodes"]["W1"]["x"]]
+    assert len(set(from_corridor)) == len(from_corridor), "channels overlap"
+
+
+def test_crossing_produces_arc_hop():
+    # swap the mapping so wires cross -> at least one half-circle hop (arc "A")
+    yml = """
+connectors:
+  X1: {pincount: 2}
+  X2: {pincount: 2}
+cables:
+  W1: {wirecount: 2}
+connections:
+  -
+    - X1: [1, 2]
+    - W1: [1, 2]
+    - X2: [2, 1]
+"""
+    svg = render_svg(harness_of(yml))
+    assert " A " in svg, "expected an arc hop at the wire crossing"
+
+
+def test_no_spurious_hops_when_no_crossings():
+    # straight 1:1 mapping in a tiny 1-wire harness -> no arcs
+    yml = """
+connectors:
+  X1: {pincount: 1}
+  X2: {pincount: 1}
+cables:
+  W1: {wirecount: 1}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+    svg = render_svg(harness_of(yml))
+    assert " A " not in svg
 
 
 def test_wire_colors_resolved_to_hex():
