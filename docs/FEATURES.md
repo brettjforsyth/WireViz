@@ -154,6 +154,36 @@ Only generic metadata ships — **no proprietary manufacturer CAD or images are
 bundled.** You supply the actual assets via `--cad-dir` or a provider; the
 library only knows how to find and describe them.
 
+## Engineering & manufacturing suite
+
+A block of calculators and exporters (each importable and, where it produces a
+file, on the CLI):
+
+- **Nets & netlist** (`wv_nets`, `--netlist`) — electrical nets through cables,
+  splices, and mates; export as text, CSV, or a KiCad-style netlist; flags
+  floating (single-pin) nodes.
+- **Bundle diameter & fill** (`wv_bundle`) — wire OD → bundle OD → conduit/sleeve
+  fill %, with a NEC-style limit and a smallest-sleeve recommendation.
+- **Gauge recommender** (`wv_electrical.recommend_gauge`) — thinnest AWG that
+  meets both ampacity and a voltage-drop budget for a given current and length.
+- **Weight & length** (`wv_weight`) — copper + insulation mass and total
+  conductor length per cable and for the whole harness.
+- **Cost / quote** (`wv_quote`) — wire-by-length + connector materials + labour
+  (crimp/connector counts) + markup, from a caller-supplied price book.
+- **Mate DRC** (`wv_drc`) — mated connectors must have equal pin counts
+  (`E-MATE-PINCOUNT`) and opposing genders (`W-MATE-GENDER`).
+- **Wire markers** (`wv_markers`, `--markers`) — per-end labels (which wire,
+  where it goes) as label-software CSV and a printable SVG label sheet.
+- **Assembly traveler** (`wv_assembly`, `--traveler`) — ordered build steps:
+  cut/strip → populate cavities → sleeve → mate.
+- **Revision diff** (`wv_diff`, `--diff other.yml`) — added/removed/changed
+  connectors, cables, and wires between two revisions.
+- **DXF export** (`wv_dxf`, `--dxf`) — the formboard as a layered R12 DXF for CAD
+  and cutting machines.
+
+`--report` prints a quick engineering summary (weight, net count, per-cable
+bundle diameter + recommended sleeve) to the console.
+
 ## Still to come
 
 True three.js 3D view; a channel router guaranteeing zero wire overlap on dense

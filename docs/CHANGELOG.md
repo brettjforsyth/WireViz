@@ -28,6 +28,14 @@
   the renderers. CLI `--cad-dir` / `--list-connectors`.
 - Security: sanitised HTML output (XSS), path-contained file resolution
   (traversal), and a bound on `expand()` ranges (DoS).
+- MIL-STD-681F wire ident bands (`wv_idents`), shown on the cut sheet.
+- Engineering & manufacturing suite: electrical nets + netlist (`wv_nets`,
+  `--netlist`), bundle diameter / sleeve fill (`wv_bundle`), minimum-gauge
+  recommender (`wv_electrical.recommend_gauge`), weight & length rollup
+  (`wv_weight`), cost/quote (`wv_quote`), mate-compatibility DRC, wire markers
+  (`wv_markers`, `--markers`), assembly traveler (`wv_assembly`, `--traveler`),
+  revision diff (`wv_diff`, `--diff`), and DXF export (`wv_dxf`, `--dxf`), plus
+  a console `--report`.
 
 ### Maintenance
 
