@@ -18,6 +18,7 @@ from wireviz.wv_assembly import build_traveler, to_text as traveler_text
 from wireviz.wv_bundle import bundle_report
 from wireviz.wv_connectors import apply_connector_types, list_connectors
 from wireviz.wv_diff import diff_harnesses, to_text as diff_text
+from wireviz.wv_dossier import render_dossier
 from wireviz.wv_dxf import formboard_to_dxf
 from wireviz.wv_markers import build_markers, to_csv as markers_csv, to_svg_sheet
 from wireviz.wv_nets import compute_nets, to_text as nets_text
@@ -172,6 +173,10 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Print an engineering report (weight, bundles, nets) to the console.",
 )
 @click.option(
+    "--dossier", is_flag=True, default=False,
+    help="Write a self-contained HTML build dossier (<name>.dossier.html).",
+)
+@click.option(
     "--diff", "diff_file", default=None, type=Path,
     help="Print a revision diff of this harness against another YAML file.",
 )
@@ -246,6 +251,7 @@ def wireviz(
     markers,
     traveler,
     report,
+    dossier,
     diff_file,
     cutsheet,
     source,
@@ -452,6 +458,12 @@ def wireviz(
             out = output_base.with_suffix(".accessories.tsv")
             out.write_text(accessories_tsv(accessory_bom(harness)))
             print("Accessories: ", out)
+
+        # Combined HTML build dossier
+        if dossier:
+            out = output_base.with_suffix(".dossier.html")
+            out.write_text(render_dossier(harness))
+            print("Dossier:     ", out)
 
         # Wire markers (CSV + label sheet)
         if markers:
