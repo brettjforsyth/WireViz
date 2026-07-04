@@ -72,6 +72,32 @@ connections:
     assert rep["total_mass_g"] is None  # nothing had a gauge
 
 
+def test_shield_not_weighed_as_conductor():
+    # regression: a braided shield must not be counted as a full copper wire
+    def mass(shield):
+        s = "shield: true" if shield else "shield: false"
+        h = wireviz.parse(
+            f"""
+connectors:
+  X1: {{pincount: 2}}
+  X2: {{pincount: 2}}
+cables:
+  W1: {{wirecount: 2, gauge: 24 AWG, {s}, length: 1}}
+connections:
+  -
+    - X1: [1, 2]
+    - W1: [1, 2]
+    - X2: [1, 2]
+""",
+            return_types="harness",
+        )
+        return weight_report(h)
+
+    shielded, plain = mass(True), mass(False)
+    assert shielded["total_mass_g"] == plain["total_mass_g"]
+    assert shielded["total_conductor_length_m"] == plain["total_conductor_length_m"] == 2.0
+
+
 def test_all_examples_weigh():
     for subdir in ("examples", "tutorial"):
         for y in sorted((REPO_ROOT / subdir).glob("*.yml")):

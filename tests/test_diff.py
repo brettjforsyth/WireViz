@@ -102,6 +102,23 @@ connections:
     assert d.wires_added and d.wires_removed
 
 
+def test_equivalent_gauge_is_not_a_change():
+    # regression: 0.25 (number) and "0.25 mm2" are the same gauge
+    a = """
+connectors: {X1: {pincount: 1}, X2: {pincount: 1}}
+cables: {W1: {wirecount: 1, gauge: 0.25}}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+    b = a.replace("gauge: 0.25", "gauge: 0.25 mm2")
+    d = diff_harnesses(h(a), h(b))
+    changed = {c.name for c in d.cables_changed}
+    assert "W1" not in changed  # no phantom gauge change
+
+
 def test_text_report_lists_changes():
     t = to_text(diff_harnesses(h(OLD), h(NEW)))
     assert "X3" in t and "pincount" in t

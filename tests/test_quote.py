@@ -35,14 +35,14 @@ def test_crimp_count():
 
 
 def test_quote_totals_with_prices():
-    prices = {"W1": 0.50, "X1": 2.00, "X2": 3.00}  # W1 $/m, connectors ea
+    prices = {"W1": 0.50, "X1": 2.00, "X2": 3.00}  # W1 $/cable-m, connectors ea
     cfg = QuoteConfig(labor_per_crimp=0.10, labor_per_connector=1.00, markup=0.0)
     q = quote(h(), prices, cfg)
-    # wire: 2 wires * 1 m * 0.50 = 1.00 ; connectors 2+3 = 5.00 ; material = 6.00
-    assert abs(q["material_cost"] - 6.00) < 1e-6
+    # wire: 1 m of cable * 0.50 = 0.50 ; connectors 2+3 = 5.00 ; material = 5.50
+    assert abs(q["material_cost"] - 5.50) < 1e-6
     # labor: 4 crimps * 0.10 + 2 connectors * 1.00 = 2.40
     assert abs(q["labor_cost"] - 2.40) < 1e-6
-    assert abs(q["total"] - 8.40) < 1e-6  # markup 0
+    assert abs(q["total"] - 7.90) < 1e-6  # markup 0
 
 
 def test_markup_applied():

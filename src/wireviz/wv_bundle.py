@@ -87,27 +87,28 @@ class BundleInfo:
     recommended_sleeve: Optional[float]
 
 
-def _cable_wire_ods(cable, wall: float) -> List[float]:
-    od = wire_outer_diameter(cable.gauge, cable.gauge_unit, wall)
-    n = cable.wirecount or 0
-    if cable.shield:
-        n += 1
-    return [od for _ in range(n)] if od else []
+def _cable_wire_count(cable) -> int:
+    return (cable.wirecount or 0) + (1 if cable.shield else 0)
 
 
 def bundle_report(harness, wall: float = DEFAULT_WALL_MM) -> List[BundleInfo]:
-    """Per-cable bundle diameter and recommended sleeve size."""
+    """Per-cable bundle diameter and recommended sleeve size.
+
+    The wire count always reflects the cable's wires (+ shield); only the
+    diameters/sleeve are None when the gauge is missing, so a gauge-less cable
+    still reports the right count.
+    """
     out = []
     for name, cable in harness.cables.items():
-        ods = _cable_wire_ods(cable, wall)
-        n = len(ods)
-        b = bundle_diameter(ods) if ods else 0.0
+        n = _cable_wire_count(cable)
+        od = wire_outer_diameter(cable.gauge, cable.gauge_unit, wall)
+        ods = [od] * n if od else []
         out.append(
             BundleInfo(
                 cable=name,
                 wire_count=n,
-                wire_od=round(ods[0], 2) if ods else None,
-                bundle_od=round(b, 2),
+                wire_od=round(od, 2) if od else None,
+                bundle_od=round(bundle_diameter(ods), 2) if ods else 0.0,
                 recommended_sleeve=recommend_sleeve(ods) if ods else None,
             )
         )

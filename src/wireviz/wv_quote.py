@@ -72,7 +72,9 @@ def quote(
         if per_m is None:
             unpriced.append(f"wire {name}")
             per_m = 0.0
-        qty = round(length_m * (cable.wirecount or 1), 4)
+        # priced per cable-metre (jacketed cable / bundle sold by the metre); for
+        # loose wire sold per wire-metre, price it with the per-wire rate.
+        qty = round(length_m, 4)
         items.append(
             LineItem("wire", name, qty, "m", per_m, round(qty * per_m, 4))
         )

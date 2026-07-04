@@ -64,10 +64,26 @@ def compute_nets(harness) -> List[Net]:
                     (c.from_name, c.from_pin), (c.to_name, c.to_pin)
                 )
 
-    # mates join pins directly
+    # mates join pins directly. A MatePin may reference a pin *label*, which
+    # (unlike a cable connection) is not resolved to a pin number upstream, so
+    # resolve it here or the mate lands on a phantom node.
+    def _resolve(cname, pin):
+        conn = harness.connectors.get(cname)
+        if conn is None or pin in conn.pins:
+            return pin
+        labels = conn.pinlabels or []
+        if pin in labels:
+            idx = labels.index(pin)
+            if idx < len(conn.pins):
+                return conn.pins[idx]
+        return pin
+
     for mate in harness.mates:
         if isinstance(mate, MatePin):
-            uf.union((mate.from_name, mate.from_pin), (mate.to_name, mate.to_pin))
+            uf.union(
+                (mate.from_name, _resolve(mate.from_name, mate.from_pin)),
+                (mate.to_name, _resolve(mate.to_name, mate.to_pin)),
+            )
         elif isinstance(mate, MateComponent):
             a = harness.connectors.get(mate.from_name)
             b = harness.connectors.get(mate.to_name)

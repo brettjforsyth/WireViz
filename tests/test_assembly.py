@@ -67,6 +67,25 @@ connections:
     assert any(s.kind == "mate" for s in steps)
 
 
+def test_cavities_sorted_numerically():
+    # regression: cavity 2 must come before cavity 10, not lexicographically after
+    yml = """
+connectors:
+  X1: {pincount: 12}
+  X2: {pincount: 12}
+cables:
+  W1: {wirecount: 12}
+connections:
+  -
+    - X1: [1-12]
+    - W1: [1-12]
+    - X2: [1-12]
+"""
+    steps = build_traveler(h(yml))
+    pop = next(s for s in steps if s.kind == "populate" and "X1" in s.title)
+    assert pop.detail.index("cavity 2 ") < pop.detail.index("cavity 10 ")
+
+
 def test_to_text_renders():
     t = to_text(build_traveler(h()))
     assert "Assembly Traveler" in t and "Cut W1" in t

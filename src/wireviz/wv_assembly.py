@@ -60,9 +60,13 @@ def build_traveler(harness) -> List[Step]:
         )
 
     # 2) populate connectors
+    def _pin_key(pin):
+        # numeric pins sort numerically (cavity 2 before cavity 10)
+        return (0, pin, "") if isinstance(pin, int) else (1, 0, str(pin))
+
     cav = _connector_cavities(harness)
     for name, conn in harness.connectors.items():
-        rows = sorted(cav.get(name, []), key=lambda t: str(t[0]))
+        rows = sorted(cav.get(name, []), key=lambda t: _pin_key(t[0]))
         if not rows:
             continue
         detail = "; ".join(f"cavity {pin} ← {wire} (to {other})" for pin, wire, other in rows)

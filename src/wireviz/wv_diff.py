@@ -47,11 +47,25 @@ class HarnessDiff:
         )
 
 
+def _equal(a, b) -> bool:
+    """Equality that treats numerically-equivalent values as equal.
+
+    WireViz stores some fields as a float or a str depending on how they were
+    written (gauge 0.25 vs '0.25'), so a plain != would flag a phantom change.
+    """
+    if a == b:
+        return True
+    try:
+        return float(a) == float(b)
+    except (TypeError, ValueError):
+        return False
+
+
 def _attr_diff(old, new, attrs) -> List[Tuple[str, Any, Any]]:
     changes = []
     for a in attrs:
         ov, nv = getattr(old, a, None), getattr(new, a, None)
-        if ov != nv:
+        if not _equal(ov, nv):
             changes.append((a, ov, nv))
     return changes
 

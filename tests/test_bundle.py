@@ -94,6 +94,28 @@ connections:
     assert w1.wire_count == 3  # 2 wires + shield
 
 
+def test_gaugeless_cable_still_reports_wire_count():
+    # regression: a populated cable with no gauge must still report its count
+    h = wireviz.parse(
+        """
+connectors:
+  X1: {pincount: 4}
+  X2: {pincount: 4}
+cables:
+  W1: {wirecount: 4, length: 2}
+connections:
+  -
+    - X1: [1, 2, 3, 4]
+    - W1: [1, 2, 3, 4]
+    - X2: [1, 2, 3, 4]
+""",
+        return_types="harness",
+    )
+    w1 = next(r for r in bundle_report(h) if r.cable == "W1")
+    assert w1.wire_count == 4  # not silently 0
+    assert w1.wire_od is None  # but no diameter without a gauge
+
+
 def test_no_gauge_yields_no_diameter():
     h = wireviz.parse(
         """

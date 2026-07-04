@@ -65,7 +65,9 @@ def weight_report(harness, wall: float = DEFAULT_WALL_MM) -> dict:
     have_mass = False
     for name, cable in harness.cables.items():
         length_m = to_mm(cable.length, cable.length_unit) / 1000.0
-        n = (cable.wirecount or 0) + (1 if cable.shield else 0)
+        # count only the signal conductors: a braided shield is not a solid wire
+        # at the signal gauge, and we have no separate spec to weigh it.
+        n = cable.wirecount or 0
         cond_len = n * length_m
         per_m = wire_mass_per_m(cable.gauge, cable.gauge_unit, wall)
         mass = round(per_m * cond_len, 2) if per_m is not None else None

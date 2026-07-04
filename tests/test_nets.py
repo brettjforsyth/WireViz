@@ -122,6 +122,26 @@ connections:
     assert ("X1", 2) in floats and ("X1", 3) in floats
 
 
+def test_pin_mate_by_label_resolves_to_real_pins():
+    # regression: a pin-mate written by pin LABEL must land on the real pins
+    nets = compute_nets(
+        h(
+            """
+connectors:
+  J1: {pincount: 2, pinlabels: [VCC, GND]}
+  J2: {pincount: 2, pinlabels: [VCC, GND]}
+connections:
+  -
+    - J1: [VCC]
+    - -->
+    - J2: [VCC]
+"""
+        )
+    )
+    n = net_of(nets, ("J1", 1))  # VCC is pin 1
+    assert ("J2", 1) in n.nodes  # mated to J2 pin 1, not a phantom 'VCC' node
+
+
 def test_exports_do_not_crash():
     nets = compute_nets(
         h(
