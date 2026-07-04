@@ -19,6 +19,7 @@ from wireviz.wv_bundle import bundle_report
 from wireviz.wv_connectors import apply_connector_types, list_connectors
 from wireviz.wv_diff import diff_harnesses, to_text as diff_text
 from wireviz.wv_dossier import render_dossier
+from wireviz.wv_editor import render_editor
 from wireviz.wv_dxf import formboard_to_dxf
 from wireviz.wv_markers import build_markers, to_csv as markers_csv, to_svg_sheet
 from wireviz.wv_nets import compute_nets, to_text as nets_text
@@ -187,6 +188,10 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Write per-connector pinout cards (<name>.pinout.html).",
 )
 @click.option(
+    "--editor", is_flag=True, default=False,
+    help="Write an interactive drag-to-edit HTML viewer (<name>.editor.html).",
+)
+@click.option(
     "--diff", "diff_file", default=None, type=Path,
     help="Print a revision diff of this harness against another YAML file.",
 )
@@ -264,6 +269,7 @@ def wireviz(
     report,
     dossier,
     pinout,
+    editor,
     diff_file,
     cutsheet,
     source,
@@ -488,6 +494,12 @@ def wireviz(
             out = output_base.with_suffix(".pinout.html")
             out.write_text(pinout_html(harness))
             print("Pinout:      ", out)
+
+        # Interactive drag-to-edit viewer
+        if editor:
+            out = output_base.with_suffix(".editor.html")
+            out.write_text(render_editor(harness))
+            print("Editor:      ", out)
 
         # Wire markers (CSV + label sheet)
         if markers:
