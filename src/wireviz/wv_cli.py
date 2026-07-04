@@ -25,6 +25,14 @@ from wireviz.wv_markers import build_markers, to_csv as markers_csv, to_svg_shee
 from wireviz.wv_nets import compute_nets, to_text as nets_text
 from wireviz.wv_pinout import to_html as pinout_html
 from wireviz.wv_weight import weight_report
+from wireviz.wv_crimp import crimp_setup_summary
+from wireviz.wv_inspection import to_text as inspection_text
+from wireviz.wv_power import power_report, to_text as power_text
+from wireviz.wv_splice import find_splices
+from wireviz.wv_testgen import build_test_program, to_csv as testprog_csv
+from wireviz.wv_variants import apply_variant, list_variants
+from wireviz.wv_whereused import cross_reference, to_text as whereused_text
+from wireviz.wv_zpl import harness_to_zpl
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
 from wireviz.wv_formboard import PAGE_SIZES, FormboardConfig, page_grid, build_formboard, render_formboard
 from wireviz.wv_devices import expand_devices, list_devices
@@ -177,7 +185,35 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
 )
 @click.option(
     "--report", is_flag=True, default=False,
-    help="Print an engineering report (weight, bundles, nets) to the console.",
+    help="Print an engineering report (weight, bundles, nets, power, splices).",
+)
+@click.option(
+    "--variant", "variant", default=None, type=str,
+    help="Build only the named harness variant (see 'variants:' section).",
+)
+@click.option(
+    "--list-variants", "list_variants_flag", is_flag=True, default=False,
+    help="List the variants declared in FILE and exit.",
+)
+@click.option(
+    "--testprog", is_flag=True, default=False,
+    help="Write the continuity/isolation test program (<name>.testprog.csv).",
+)
+@click.option(
+    "--zpl", is_flag=True, default=False,
+    help="Write wire markers as Zebra ZPL labels (<name>.zpl).",
+)
+@click.option(
+    "--crimp", is_flag=True, default=False,
+    help="Write the crimp tooling setup (<name>.crimp.tsv).",
+)
+@click.option(
+    "--inspection", is_flag=True, default=False,
+    help="Write the inspection checklist + traceability code (<name>.inspection.txt).",
+)
+@click.option(
+    "--whereused", "whereused_mpn", default=None, type=str,
+    help="Print where a given MPN is used (or a full cross-reference if empty).",
 )
 @click.option(
     "--dossier", is_flag=True, default=False,
@@ -267,6 +303,13 @@ def wireviz(
     markers,
     traveler,
     report,
+    variant,
+    list_variants_flag,
+    testprog,
+    zpl,
+    crimp,
+    inspection,
+    whereused_mpn,
     dossier,
     pinout,
     editor,
@@ -368,16 +411,24 @@ def wireviz(
                 else from_kicad_netlist(yaml_input)
             )
         else:
-            # Expand device-library references and back-fill connector-type
-            # metadata before parsing. Only switch to the dict path when one of
-            # those features is used, so behaviour is identical otherwise.
             harness_input = yaml_input
             try:
                 probe = yaml.safe_load(yaml_input)
             except Exception:  # noqa: BLE001 - let parse report YAML errors
                 probe = None
-            if isinstance(probe, dict) and _wants_preprocess(probe):
-                harness_input = apply_connector_types(expand_devices(probe))
+            if list_variants_flag:
+                vs = list_variants(probe) if isinstance(probe, dict) else []
+                print("Variants:    ", ", ".join(vs) if vs else "(none)")
+                continue
+            if isinstance(probe, dict):
+                data = probe
+                # apply a variant selection (or strip variant tags for a
+                # variant file with no selection) before other preprocessing
+                if variant is not None or list_variants(probe):
+                    data = apply_variant(data, variant)
+                    harness_input = apply_connector_types(expand_devices(data))
+                elif _wants_preprocess(data):
+                    harness_input = apply_connector_types(expand_devices(data))
 
         # Parse once to the model; the extra features below run on it directly
         # and need no `dot` binary, so a missing Graphviz can't block them.
@@ -533,6 +584,53 @@ def wireviz(
                     f"  {b.cable}: {b.wire_count} wires, bundle ~{b.bundle_od} mm"
                     + sleeve
                 )
+            pr = power_report(harness)
+            if pr["rows"]:
+                print(f"Power: total I²R loss {pr['total_power_loss_w']} W")
+            splices = find_splices(harness)
+            if splices:
+                print(f"Splices: {len(splices)}")
+                for s in splices:
+                    print(f"  {s.connector}:{s.pin} — {s.branches}-way")
+
+        # Continuity/isolation test program
+        if testprog:
+            out = output_base.with_suffix(".testprog.csv")
+            out.write_text(testprog_csv(build_test_program(harness)))
+            print("Test program:", out)
+
+        # ZPL wire-marker labels
+        if zpl:
+            out = output_base.with_suffix(".zpl")
+            out.write_text(harness_to_zpl(harness))
+            print("ZPL labels:  ", out)
+
+        # Crimp tooling setup
+        if crimp:
+            rows = crimp_setup_summary(harness)
+            lines = ["series\ttool\tdie\theight_mm\tpins"] + [
+                f"{g['series']}\t{g['tool']}\t{g['die']}\t{g['height']}\t{', '.join(g['pins'])}"
+                for g in rows
+            ]
+            out = output_base.with_suffix(".crimp.tsv")
+            out.write_text("\n".join(lines) + "\n")
+            print("Crimp setup: ", out)
+
+        # Inspection checklist + traceability
+        if inspection:
+            out = output_base.with_suffix(".inspection.txt")
+            out.write_text(inspection_text(harness))
+            print("Inspection:  ", out)
+
+        # Where-used cross-reference (console)
+        if whereused_mpn is not None:
+            print(f"\n--- Where used ---")
+            if whereused_mpn:
+                for u in cross_reference(harness):
+                    if u["mpn"] == whereused_mpn:
+                        print(f"{u['mpn']}: qty {u['total_qty']} — {', '.join(u['used_by'])}")
+            else:
+                print(whereused_text(cross_reference(harness)))
 
         # Revision diff against another harness
         if diff_file:
