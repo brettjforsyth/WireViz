@@ -58,6 +58,7 @@ class Options:
     color_mode: ColorMode = "SHORT"
     mini_bom_mode: bool = True
     template_separator: str = "."
+    connector_type: Optional[str] = None  # default connector-type preference
 
     def __post_init__(self):
         if not self.bgcolor_node:
@@ -151,6 +152,8 @@ class Connector:
     category: Optional[str] = None
     type: Optional[MultilineHypertext] = None
     subtype: Optional[MultilineHypertext] = None
+    connector_type: Optional[str] = None  # library key for metadata + CAD assets
+    gender: Optional[str] = None  # pin/socket/receptacle (from the library)
     pincount: Optional[int] = None
     image: Optional[Image] = None
     notes: Optional[MultilineHypertext] = None
