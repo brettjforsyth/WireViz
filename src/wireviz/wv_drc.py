@@ -19,7 +19,12 @@ from enum import IntEnum
 from typing import Callable, Dict, List, Optional
 
 from wireviz.DataClasses import MateComponent, MatePin
-from wireviz.wv_electrical import ampacity_for, ampacity_margin, voltage_drop
+from wireviz.wv_electrical import (
+    ampacity_for,
+    ampacity_margin,
+    bundle_derating,
+    voltage_drop,
+)
 
 # Warn when a wire's current exceeds this fraction of its ampacity.
 AMPACITY_WARN_FRACTION = 0.9
@@ -335,6 +340,31 @@ def _ampacity_exceeded(harness):
                 "W-AMPACITY-MARGIN",
                 f"cable {cable.name} carries {cable.current} A, within "
                 f"{round(margin * 100)}% of its ~{amp} A ampacity",
+                cable.name,
+            )
+
+
+@rule("W-BUNDLE-DERATE")
+def _bundle_derate(harness):
+    """A cable's current exceeds its bundle-derated ampacity.
+
+    When many current-carrying wires share a bundle they can't shed heat, so
+    ampacity is derated by conductor count. Active only when `current` is set.
+    """
+    for cable in harness.cables.values():
+        if not cable.current or not cable.gauge:
+            continue
+        amp = ampacity_for(cable.gauge, cable.gauge_unit)
+        if amp is None:
+            continue
+        factor = bundle_derating((cable.wirecount or 1) + (1 if cable.shield else 0))
+        if factor < 1.0 and cable.current > amp * factor:
+            yield DRCFinding(
+                Severity.WARNING,
+                "W-BUNDLE-DERATE",
+                f"cable {cable.name} carries {cable.current} A, above its "
+                f"bundle-derated ampacity ~{round(amp * factor, 1)} A "
+                f"(x{factor} for {cable.wirecount} wires)",
                 cable.name,
             )
 

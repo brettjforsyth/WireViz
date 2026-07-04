@@ -156,6 +156,21 @@ def ampacity_margin(current: float, gauge, unit) -> Optional[float]:
     return current / amp
 
 
+def bundle_derating(conductor_count: int) -> float:
+    """Ampacity derating factor for `conductor_count` current-carrying wires in
+    a bundle (heat can't escape), following the usual stepped guidance."""
+    n = max(int(conductor_count), 1)
+    if n <= 3:
+        return 1.0
+    if n <= 6:
+        return 0.80
+    if n <= 15:
+        return 0.70
+    if n <= 30:
+        return 0.50
+    return 0.40
+
+
 def _awg_label(awg: int) -> str:
     """Human AWG label: 0 -> '1/0', -1 -> '2/0', 4 -> '4'."""
     if awg <= 0:

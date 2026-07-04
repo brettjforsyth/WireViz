@@ -27,6 +27,7 @@ from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
 from wireviz.wv_formboard import PAGE_SIZES, FormboardConfig, page_grid, build_formboard, render_formboard
 from wireviz.wv_devices import expand_devices, list_devices
 from wireviz.wv_import import from_kicad_netlist, from_wirelist
+from wireviz.wv_machine import machine_joblist, to_csv as machine_csv
 from wireviz.wv_drc import format_report, has_errors, run_drc
 from wireviz.wv_sourcing import (
     DigiKeyProvider,
@@ -161,6 +162,10 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Write the accessory/covering BOM (<name>.accessories.tsv).",
 )
 @click.option(
+    "--cutmachine", is_flag=True, default=False,
+    help="Write a wire-processing machine job CSV (<name>.cutmachine.csv).",
+)
+@click.option(
     "--markers", is_flag=True, default=False,
     help="Write wire markers: CSV + label sheet (<name>.markers.csv/.svg).",
 )
@@ -248,6 +253,7 @@ def wireviz(
     dxf,
     netlist,
     accessories_out,
+    cutmachine,
     markers,
     traveler,
     report,
@@ -464,6 +470,12 @@ def wireviz(
             out = output_base.with_suffix(".dossier.html")
             out.write_text(render_dossier(harness))
             print("Dossier:     ", out)
+
+        # Wire-processing machine job
+        if cutmachine:
+            out = output_base.with_suffix(".cutmachine.csv")
+            out.write_text(machine_csv(machine_joblist(harness)))
+            print("Cut machine: ", out)
 
         # Wire markers (CSV + label sheet)
         if markers:

@@ -15,6 +15,7 @@ from wireviz.wv_electrical import (  # noqa: E402
     ampacity_margin,
     area_to_awg,
     awg_area_mm2,
+    bundle_derating,
     recommend_gauge,
     resistance_per_m,
     voltage_drop,
@@ -155,6 +156,48 @@ def test_recommend_gauge_reports_limit_when_impossible():
     # absurd current beyond the thickest gauge -> flagged ampacity-limited
     r = recommend_gauge(1000, 1.0)
     assert r["limited_by"] == "ampacity"
+
+
+def test_bundle_derating_steps():
+    assert bundle_derating(3) == 1.0
+    assert bundle_derating(5) == 0.80
+    assert bundle_derating(10) == 0.70
+    assert bundle_derating(20) == 0.50
+
+
+def test_bundle_derate_drc_fires():
+    # 20-wire 18 AWG cable (16 A ampacity), derated x0.5 -> 8 A; carrying 10 A
+    yml = """
+connectors:
+  X1: {pincount: 1}
+  X2: {pincount: 1}
+cables:
+  W1: {wirecount: 20, gauge: 18 AWG, current: 10}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+    c = codes(drc(yml))
+    assert "W-BUNDLE-DERATE" in c
+    assert "E-AMPACITY" not in c  # 10 A is under the un-derated 16 A
+
+
+def test_bundle_derate_silent_without_current():
+    yml = """
+connectors:
+  X1: {pincount: 1}
+  X2: {pincount: 1}
+cables:
+  W1: {wirecount: 20, gauge: 18 AWG}
+connections:
+  -
+    - X1: [1]
+    - W1: [1]
+    - X2: [1]
+"""
+    assert "W-BUNDLE-DERATE" not in codes(drc(yml))
 
 
 def test_examples_still_clean_with_electrical_rules():
