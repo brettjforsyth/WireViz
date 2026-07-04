@@ -13,6 +13,7 @@ if __name__ == "__main__":
 import wireviz.wireviz as wv
 from wireviz import APP_NAME, __version__
 from wireviz.wv_helper import file_read_text
+from wireviz.wv_accessories import accessory_bom, to_tsv as accessories_tsv
 from wireviz.wv_assembly import build_traveler, to_text as traveler_text
 from wireviz.wv_bundle import bundle_report
 from wireviz.wv_connectors import apply_connector_types, list_connectors
@@ -154,6 +155,10 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Write the electrical netlist (<name>.netlist.txt).",
 )
 @click.option(
+    "--accessories", "accessories_out", is_flag=True, default=False,
+    help="Write the accessory/covering BOM (<name>.accessories.tsv).",
+)
+@click.option(
     "--markers", is_flag=True, default=False,
     help="Write wire markers: CSV + label sheet (<name>.markers.csv/.svg).",
 )
@@ -228,6 +233,7 @@ def wireviz(
     formboard,
     dxf,
     netlist,
+    accessories_out,
     markers,
     traveler,
     report,
@@ -421,6 +427,12 @@ def wireviz(
             out = output_base.with_suffix(".netlist.txt")
             out.write_text(nets_text(compute_nets(harness)))
             print("Netlist:     ", out)
+
+        # Accessory / covering BOM
+        if accessories_out:
+            out = output_base.with_suffix(".accessories.tsv")
+            out.write_text(accessories_tsv(accessory_bom(harness)))
+            print("Accessories: ", out)
 
         # Wire markers (CSV + label sheet)
         if markers:
