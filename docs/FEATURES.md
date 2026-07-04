@@ -192,6 +192,15 @@ bundle diameter + recommended sleeve) to the console.
 - **Importers** (`wv_import`, `--import wirelist|kicad`) — bootstrap a harness
   from a from/to wire-list CSV (with header aliases; one cable per connector
   pair) or a KiCad netlist (components → connectors, nets → wires).
+- **Harness dossier** (`wv_dossier`, `--dossier`) — one self-contained HTML build
+  package: diagram, cut sheet (with ident bands), engineering summary,
+  bundle/sleeve table, accessory BOM, and assembly traveler.
+- **Wire-processing machine export** (`wv_machine`, `--cutmachine`) — a cut/strip
+  machine job CSV (article, cut length in mm, strip lengths, seals, marker).
+- **Twisted pairs** (`twisting:` on a cable) — a Twist column on the cut sheet
+  and the twist length factor applied only to the twisted wires.
+- **Bundle derating** (`wv_electrical.bundle_derating`, DRC `W-BUNDLE-DERATE`) —
+  ampacity derated by conductor count for wires bundled together.
 
 ## Still to come
 
