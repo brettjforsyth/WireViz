@@ -22,10 +22,9 @@ without the MCP runtime; ``build_server`` registers them with FastMCP.
 import os
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import wireviz.wireviz as wv
-from wireviz.wv_bom import bom_list
 
 
 def _default_output_dir() -> Optional[str]:
