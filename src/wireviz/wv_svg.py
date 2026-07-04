@@ -530,54 +530,57 @@ def _vertical_segments(wires: List[dict]):
     return verts
 
 
-def _wire_path(wire: dict, index: int, verts, cfg: GridConfig) -> str:
-    """Build an SVG path `d` for a wire, hopping over crossed vertical wires.
-
-    Each horizontal segment draws a small half-circle where it crosses another
-    wire's vertical run (the standard "wire crossing" convention). Only the
-    horizontal wire hops, so every crossing gets exactly one hop.
-    """
-    pts = wire["points"]
+def _horizontal_crossings(y, x1, x2, index, verts, cfg):
+    """Return the x-positions where the horizontal segment (y, x1..x2) crosses
+    another wire's vertical run and should hop over it."""
     r = cfg.hop_radius
-    d = [f"M {pts[0][0]} {pts[0][1]}"]
-    for (x1, y1), (x2, y2) in zip(pts, pts[1:]):
-        if y1 == y2 and x1 != x2:  # horizontal segment: insert hops
+    lo, hi = min(x1, x2), max(x1, x2)
+    return [
+        vx
+        for (vi, vx, vy1, vy2) in verts
+        if vi != index
+        # A hop is only for a true mid-span crossing: the vertical must pass
+        # strictly through the horizontal (so a corner/T is never hopped) and
+        # the crossing must clear this wire's own ends by a hop radius.
+        and lo + r < vx < hi - r
+        and vy1 < y < vy2
+    ]
+
+
+def _wire_dpaths(wire: dict, index: int, verts, cfg: GridConfig):
+    """Split a wire into two SVG `d` strings: its vertical segments and its
+    horizontal segments (the latter carrying the half-circle hops).
+
+    Verticals are drawn in a lower layer and horizontals in an upper layer, so
+    every hop (always on a horizontal) sits above the vertical it crosses.
+    """
+    r = cfg.hop_radius
+    d_vert, d_horiz = [], []
+    for (x1, y1), (x2, y2) in zip(wire["points"], wire["points"][1:]):
+        if x1 == x2 and y1 != y2:  # vertical
+            d_vert.append(f"M {x1} {y1} L {x2} {y2}")
+        elif y1 == y2 and x1 != x2:  # horizontal, with hops
+            d = [f"M {x1} {y1}"]
             step = 1 if x2 > x1 else -1
-            lo, hi = min(x1, x2), max(x1, x2)
-            crossings = [
-                vx
-                for (vi, vx, vy1, vy2) in verts
-                if vi != index
-                # A hop is only for a true mid-span crossing:
-                #  - the vertical must pass *strictly through* the horizontal
-                #    (vy1 < y < vy2), so a vertical that merely starts or ends
-                #    at this y — i.e. another wire's corner/T — is never hopped;
-                #  - the crossing must clear this wire's own ends by a hop
-                #    radius, so a hop never sits on top of a corner.
-                and lo + r < vx < hi - r
-                and vy1 < y1 < vy2
-            ]
-            crossings.sort(reverse=(step < 0))
             sweep = 1 if step > 0 else 0
+            crossings = _horizontal_crossings(y1, x1, x2, index, verts, cfg)
+            crossings.sort(reverse=(step < 0))
             for vx in crossings:
                 d.append(f"L {vx - r * step} {y1}")
                 d.append(f"A {r} {r} 0 0 {sweep} {vx + r * step} {y1}")
             d.append(f"L {x2} {y2}")
-        else:  # vertical (or degenerate) segment
-            d.append(f"L {x2} {y2}")
-    return " ".join(d)
+            d_horiz.append(" ".join(d))
+    return " ".join(d_vert), " ".join(d_horiz)
 
 
-def _wire_svg(wire: dict, index: int, verts, cfg: GridConfig) -> str:
-    path = _wire_path(wire, index, verts, cfg)
-    color = wire["color"] or "#000000"
-    key = escape(f"{wire['cable']}:{wire['wire']}")
-    # dark casing underneath so light-coloured wires stay visible on any bg
+def _path_pair(d, key, color, cfg):
+    if not d:
+        return ""
     return (
-        f'<path class="wire" data-wire="{key}" d="{path}" fill="none" '
+        f'<path class="wire" data-wire="{key}" d="{d}" fill="none" '
         f'stroke="#222" stroke-width="{cfg.wire_casing}" '
         f'stroke-linejoin="round" stroke-linecap="round"/>'
-        f'<path class="wire-core" data-wire="{key}" d="{path}" fill="none" '
+        f'<path class="wire-core" data-wire="{key}" d="{d}" fill="none" '
         f'stroke="{color}" stroke-width="{cfg.wire_core}" '
         f'stroke-linejoin="round" stroke-linecap="round"/>'
     )
@@ -594,13 +597,25 @@ def render_svg(
     layout = build_layout(harness, cfg, cad_dir, image_provider)
     w, h = layout["width"], layout["height"]
     verts = _vertical_segments(layout["wires"])
+    unders, overs = [], []
+    for i, wire in enumerate(layout["wires"]):
+        key = escape(f"{wire['cable']}:{wire['wire']}")
+        color = wire["color"] or "#000000"
+        d_vert, d_horiz = _wire_dpaths(wire, i, verts, cfg)
+        unders.append(_path_pair(d_vert, key, color, cfg))
+        overs.append(_path_pair(d_horiz, key, color, cfg))
     body = [
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'xmlns:xlink="http://www.w3.org/1999/xlink" '
         f'width="{w}" height="{h}" viewBox="0 0 {w} {h}">',
         _svg_grid(w, h, cfg),
-        '<g class="wires">',
-        *[_wire_svg(wire, i, verts, cfg) for i, wire in enumerate(layout["wires"])],
+        # verticals first, then horizontals on top so every hop is above the
+        # wire it crosses
+        '<g class="wires-under">',
+        *unders,
+        "</g>",
+        '<g class="wires-over">',
+        *overs,
         "</g>",
         '<g class="nodes">',
         *[_node_svg(node, cfg) for node in layout["nodes"].values()],

@@ -13,10 +13,15 @@ from wireviz import wireviz  # noqa: E402
 from wireviz.wv_svg import (  # noqa: E402
     GridConfig,
     _vertical_segments,
-    _wire_path,
+    _wire_dpaths,
     build_layout,
     render_svg,
 )
+
+
+def _horiz_d(wire, verts, cfg):
+    """The horizontal-layer path string for a wire (where hops live)."""
+    return _wire_dpaths(wire, 0, verts, cfg)[1]
 
 BASIC = """
 connectors:
@@ -148,7 +153,7 @@ def test_hop_at_true_interior_crossing():
     horizontal = _h([(0, 50), (100, 50)])
     vertical = _h([(50, 0), (50, 100)])  # passes strictly through at (50, 50)
     verts = _vertical_segments([horizontal, vertical])
-    assert " A " in _wire_path(horizontal, 0, verts, cfg)
+    assert " A " in _horiz_d(horizontal, verts, cfg)
 
 
 def test_no_hop_at_corner():
@@ -158,7 +163,7 @@ def test_no_hop_at_corner():
     horizontal = _h([(0, 50), (100, 50)])
     corner_vertical = _h([(50, 50), (50, 120)])  # top endpoint sits on y=50
     verts = _vertical_segments([horizontal, corner_vertical])
-    assert " A " not in _wire_path(horizontal, 0, verts, cfg)
+    assert " A " not in _horiz_d(horizontal, verts, cfg)
 
 
 def test_no_hop_next_to_own_corner():
@@ -168,7 +173,32 @@ def test_no_hop_next_to_own_corner():
     horizontal = _h([(0, 50), (100, 50)])
     near_end = _h([(cfg.hop_radius, 0), (cfg.hop_radius, 100)])
     verts = _vertical_segments([horizontal, near_end])
-    assert " A " not in _wire_path(horizontal, 0, verts, cfg)
+    assert " A " not in _horiz_d(horizontal, verts, cfg)
+
+
+def test_hops_render_in_upper_layer():
+    # the vertical goes in the lower layer, the hopping horizontal in the upper
+    yml = """
+connectors:
+  X1: {pincount: 2}
+  X2: {pincount: 2}
+cables:
+  W1: {wirecount: 2}
+connections:
+  -
+    - X1: [1, 2]
+    - W1: [1, 2]
+    - X2: [2, 1]
+"""
+    svg = render_svg(harness_of(yml))
+    assert '<g class="wires-under">' in svg and '<g class="wires-over">' in svg
+    # the arc (hop) only appears after the under-layer group opens... it must be
+    # within the over layer, which is emitted after the under layer
+    under_idx = svg.index('class="wires-under"')
+    over_idx = svg.index('class="wires-over"')
+    assert under_idx < over_idx
+    if " A " in svg:
+        assert svg.index(" A ") > over_idx
 
 
 def test_no_spurious_hops_when_no_crossings():
