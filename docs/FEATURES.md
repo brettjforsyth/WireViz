@@ -113,6 +113,36 @@ connections:
 `wireviz --list-devices` prints the library; `register_device()` adds your own.
 Only generic pinouts ship (no proprietary manufacturer cavity maps).
 
+## Connector types + CAD renderings (`wv_connectors`)
+
+A connector can declare a `connector_type`, which is used two ways: it
+back-fills metadata (manufacturer, pin count, gender) from a generic library,
+and it is the key used to pull the connector's **2D image and 3D CAD model**
+into the renderers.
+
+```yaml
+options:
+  connector_type: deutsch_dt_4   # optional global default
+connectors:
+  X1:
+    connector_type: deutsch_dt_4  # -> 4 pins, TE, socket, + CAD assets
+```
+
+Asset resolution order (first hit wins per asset):
+
+1. a local file you provide, named `<connector_type><ext>` in `--cad-dir`
+   (2D: `.png/.jpg/.svg/.webp`; 3D: `.glb/.gltf/.step/.stl`);
+2. an asset reference stored on the library entry;
+3. an `image_provider` callback (e.g. a distributor product photo).
+
+The grid SVG (`--grid`) draws the resolved image; the 3D viewer (`--viewer3d`)
+loads the resolved glTF model, falling back to a block. `wireviz
+--list-connectors` prints the library; `register_connector()` adds your own.
+
+Only generic metadata ships — **no proprietary manufacturer CAD or images are
+bundled.** You supply the actual assets via `--cad-dir` or a provider; the
+library only knows how to find and describe them.
+
 ## Still to come
 
 True three.js 3D view; a channel router guaranteeing zero wire overlap on dense
