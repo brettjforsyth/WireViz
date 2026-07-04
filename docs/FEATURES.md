@@ -154,6 +154,13 @@ Only generic metadata ships — **no proprietary manufacturer CAD or images are
 bundled.** You supply the actual assets via `--cad-dir` or a provider; the
 library only knows how to find and describe them.
 
+## MCP server (build harnesses from any agent)
+
+The whole engine is exposed as a Model Context Protocol server so any agent can
+validate a harness, run DRC, generate the BOM/cut sheet/netlist, recommend a
+gauge, and render a diagram — getting structured results back to iterate on.
+`pip install "wireviz[mcp]"` then `wireviz-mcp`. See [docs/MCP.md](MCP.md).
+
 ## Engineering & manufacturing suite
 
 A block of calculators and exporters (each importable and, where it produces a

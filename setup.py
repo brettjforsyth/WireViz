@@ -23,6 +23,10 @@ setup(
         "pillow",
         "graphviz",
     ],
+    extras_require={
+        # optional: expose the engine as an MCP server for other agents
+        "mcp": ["mcp>=1.0"],
+    },
     license="GPLv3",
     keywords="cable connector hardware harness wiring wiring-diagram wiring-harness",
     url=APP_URL,
@@ -32,6 +36,7 @@ setup(
     entry_points={
         "console_scripts": [
             "wireviz=wireviz.wv_cli:wireviz",
+            "wireviz-mcp=wireviz.wv_mcp:main",
         ],
     },
     classifiers=[
