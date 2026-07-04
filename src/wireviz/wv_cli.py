@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import click
+import yaml
 
 if __name__ == "__main__":
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -13,6 +14,7 @@ import wireviz.wireviz as wv
 from wireviz import APP_NAME, __version__
 from wireviz.wv_helper import file_read_text
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
+from wireviz.wv_devices import expand_devices, list_devices
 from wireviz.wv_drc import format_report, has_errors, run_drc
 from wireviz.wv_sourcing import (
     DigiKeyProvider,
@@ -130,6 +132,13 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     "Needs DIGIKEY_CLIENT_ID/SECRET or MOUSER_API_KEY in the environment.",
 )
 @click.option(
+    "--list-devices",
+    "list_devices_flag",
+    is_flag=True,
+    default=False,
+    help="List the built-in device library and exit.",
+)
+@click.option(
     "-V",
     "--version",
     is_flag=True,
@@ -150,6 +159,7 @@ def wireviz(
     json_out,
     cutsheet,
     source,
+    list_devices_flag,
     version,
 ):
     """
@@ -159,6 +169,11 @@ def wireviz(
     print(f"{APP_NAME} {__version__}")
     if version:
         return  # print version number only and exit
+    if list_devices_flag:
+        print("\nAvailable devices (reference under a 'devices:' section):")
+        for name, desc in list_devices():
+            print(f"  {name:20} {desc}")
+        return
 
     # get list of files
     try:
@@ -222,10 +237,21 @@ def wireviz(
         for p in prepend:
             image_paths.add(Path(p).parent)
 
+        # Expand any device-library references into connectors before parsing.
+        # Only switch to the dict path when a `devices:` section is present, to
+        # keep behaviour identical for files that don't use the library.
+        harness_input = yaml_input
+        try:
+            probe = yaml.safe_load(yaml_input)
+        except Exception:  # noqa: BLE001 - let parse report YAML errors
+            probe = None
+        if isinstance(probe, dict) and "devices" in probe:
+            harness_input = expand_devices(probe)
+
         # Parse once to the model; the extra features below run on it directly
         # and need no `dot` binary, so a missing Graphviz can't block them.
         harness = wv.parse(
-            yaml_input,
+            harness_input,
             return_types="harness",
             image_paths=list(image_paths),
             source_path=file,
