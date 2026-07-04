@@ -13,7 +13,14 @@ if __name__ == "__main__":
 import wireviz.wireviz as wv
 from wireviz import APP_NAME, __version__
 from wireviz.wv_helper import file_read_text
+from wireviz.wv_assembly import build_traveler, to_text as traveler_text
+from wireviz.wv_bundle import bundle_report
 from wireviz.wv_connectors import apply_connector_types, list_connectors
+from wireviz.wv_diff import diff_harnesses, to_text as diff_text
+from wireviz.wv_dxf import formboard_to_dxf
+from wireviz.wv_markers import build_markers, to_csv as markers_csv, to_svg_sheet
+from wireviz.wv_nets import compute_nets, to_text as nets_text
+from wireviz.wv_weight import weight_report
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
 from wireviz.wv_formboard import PAGE_SIZES, FormboardConfig, page_grid, build_formboard, render_formboard
 from wireviz.wv_devices import expand_devices, list_devices
@@ -139,6 +146,30 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     "(<name>.formboard.svg).",
 )
 @click.option(
+    "--dxf", is_flag=True, default=False,
+    help="Write the formboard as DXF for CAD (<name>.formboard.dxf).",
+)
+@click.option(
+    "--netlist", is_flag=True, default=False,
+    help="Write the electrical netlist (<name>.netlist.txt).",
+)
+@click.option(
+    "--markers", is_flag=True, default=False,
+    help="Write wire markers: CSV + label sheet (<name>.markers.csv/.svg).",
+)
+@click.option(
+    "--traveler", is_flag=True, default=False,
+    help="Write the assembly traveler (<name>.traveler.txt).",
+)
+@click.option(
+    "--report", is_flag=True, default=False,
+    help="Print an engineering report (weight, bundles, nets) to the console.",
+)
+@click.option(
+    "--diff", "diff_file", default=None, type=Path,
+    help="Print a revision diff of this harness against another YAML file.",
+)
+@click.option(
     "--cutsheet",
     "cutsheet",
     default=None,
@@ -195,6 +226,12 @@ def wireviz(
     viewer3d,
     json_out,
     formboard,
+    dxf,
+    netlist,
+    markers,
+    traveler,
+    report,
+    diff_file,
     cutsheet,
     source,
     cad_dir,
@@ -372,6 +409,59 @@ def wireviz(
                 f"Formboard:    {out}  ({grid['cols']}×{grid['rows']} "
                 f"{formboard} sheets)"
             )
+
+        # Formboard DXF for CAD
+        if dxf:
+            out = output_base.with_suffix(".formboard.dxf")
+            out.write_text(formboard_to_dxf(harness))
+            print("DXF:         ", out)
+
+        # Electrical netlist
+        if netlist:
+            out = output_base.with_suffix(".netlist.txt")
+            out.write_text(nets_text(compute_nets(harness)))
+            print("Netlist:     ", out)
+
+        # Wire markers (CSV + label sheet)
+        if markers:
+            mk = build_markers(harness)
+            output_base.with_suffix(".markers.csv").write_text(markers_csv(mk))
+            output_base.with_suffix(".markers.svg").write_text(to_svg_sheet(mk))
+            print("Markers:     ", output_base.with_suffix(".markers.csv"))
+
+        # Assembly traveler
+        if traveler:
+            out = output_base.with_suffix(".traveler.txt")
+            out.write_text(traveler_text(build_traveler(harness)))
+            print("Traveler:    ", out)
+
+        # Engineering report to console
+        if report:
+            wr = weight_report(harness)
+            print("\n--- Engineering report ---")
+            print(
+                f"Conductor length: {wr['total_conductor_length_m']} m"
+                + (f"   Weight: {wr['total_mass_g']} g" if wr["total_mass_g"] else "")
+            )
+            print(f"Nets: {len(compute_nets(harness))}")
+            for b in bundle_report(harness):
+                sleeve = (
+                    f"  sleeve ≥ {b.recommended_sleeve} mm"
+                    if b.recommended_sleeve
+                    else ""
+                )
+                print(
+                    f"  {b.cable}: {b.wire_count} wires, bundle ~{b.bundle_od} mm"
+                    + sleeve
+                )
+
+        # Revision diff against another harness
+        if diff_file:
+            other = wv.parse(
+                file_read_text(Path(diff_file)), return_types="harness"
+            )
+            print(f"\n--- Diff vs {diff_file} ---")
+            print(diff_text(diff_harnesses(other, harness)))
 
         # Standard Graphviz-backed outputs last (these need the `dot` binary)
         if output_formats:
