@@ -15,6 +15,7 @@ from wireviz import APP_NAME, __version__
 from wireviz.wv_helper import file_read_text
 from wireviz.wv_connectors import apply_connector_types, list_connectors
 from wireviz.wv_cutsheet import build_cut_list, to_csv, to_html, to_tsv
+from wireviz.wv_formboard import PAGE_SIZES, FormboardConfig, page_grid, build_formboard, render_formboard
 from wireviz.wv_devices import expand_devices, list_devices
 from wireviz.wv_drc import format_report, has_errors, run_drc
 from wireviz.wv_sourcing import (
@@ -130,6 +131,14 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     help="Write the harness layout as JSON (<name>.layout.json).",
 )
 @click.option(
+    "--formboard",
+    "formboard",
+    default=None,
+    type=click.Choice(sorted(PAGE_SIZES.keys())),
+    help="Write a 1:1 formboard SVG tiled for the given sheet size "
+    "(<name>.formboard.svg).",
+)
+@click.option(
     "--cutsheet",
     "cutsheet",
     default=None,
@@ -185,6 +194,7 @@ def wireviz(
     viewer,
     viewer3d,
     json_out,
+    formboard,
     cutsheet,
     source,
     cad_dir,
@@ -351,6 +361,17 @@ def wireviz(
             out = output_base.with_suffix(".layout.json")
             out.write_text(export_json(harness, cad_dir=_cad))
             print("Layout JSON: ", out)
+
+        # 1:1 formboard (nail-board) SVG
+        if formboard:
+            fb_cfg = FormboardConfig(page=formboard)
+            out = output_base.with_suffix(".formboard.svg")
+            out.write_text(render_formboard(harness, fb_cfg))
+            grid = page_grid(build_formboard(harness, fb_cfg), fb_cfg)
+            print(
+                f"Formboard:    {out}  ({grid['cols']}×{grid['rows']} "
+                f"{formboard} sheets)"
+            )
 
         # Standard Graphviz-backed outputs last (these need the `dot` binary)
         if output_formats:

@@ -92,6 +92,17 @@ highlighting. The layout JSON is embedded, so the file is also a portable data
 carrier. `--viewer3d` additionally writes a three.js 3D view (orbit/zoom;
 needs internet for the CDN).
 
+## 1:1 formboard (`wv_formboard`)
+
+`--formboard A4|A3|A2|A1|A0|letter|tabloid` writes a **life-size** formboard SVG
+(`<name>.formboard.svg`): connectors placed at physical positions (columns
+spaced by cable length), each cable drawn as an orthogonal bundle run labelled
+with its exact length, connector mounting pegs, and a dashed page grid showing
+how the board tiles across sheets of the chosen size. The SVG's `width`/`height`
+carry a `mm` suffix, so printing at 100% gives a true 1:1 template you can tape
+to a board and build the harness on top of. Geometry is exact for the common
+linear/tree harness; bundles that can't span a forced gap are flagged `⚠ SHORT`.
+
 ## Device library (`wv_devices`)
 
 Reusable multi-connector device templates (a generic ECU, ISO relay, 3-wire

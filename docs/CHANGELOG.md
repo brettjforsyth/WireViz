@@ -21,6 +21,13 @@
   `--json`.
 - Device library (`wv_devices`): reusable ECU/relay/sensor templates that expand
   from a `devices:` section into pre-labelled connectors. CLI `--list-devices`.
+- 1:1 formboard output (`wv_formboard`): life-size, page-tiled nail-board SVG
+  with connectors at physical positions and per-bundle length. CLI `--formboard`.
+- Connector-type library + CAD asset resolution (`wv_connectors`): a
+  `connector_type` back-fills metadata and pulls a 2D image / 3D glTF model into
+  the renderers. CLI `--cad-dir` / `--list-connectors`.
+- Security: sanitised HTML output (XSS), path-contained file resolution
+  (traversal), and a bound on `expand()` ranges (DoS).
 
 ### Maintenance
 
