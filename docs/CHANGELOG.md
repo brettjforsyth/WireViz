@@ -36,6 +36,11 @@
   (`wv_markers`, `--markers`), assembly traveler (`wv_assembly`, `--traveler`),
   revision diff (`wv_diff`, `--diff`), and DXF export (`wv_dxf`, `--dxf`), plus
   a console `--report`.
+- Accessory & covering data model (`wv_accessories`, `--accessories`):
+  contacts/seals/boots/backshells + sleeve/wrap/tube/heatshrink/tape rolled into
+  an accessory BOM.
+- Importers (`wv_import`, `--import wirelist|kicad`): seed a harness from a
+  from/to wire-list CSV or a KiCad netlist.
 
 ### Maintenance
 

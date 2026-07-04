@@ -184,6 +184,15 @@ file, on the CLI):
 `--report` prints a quick engineering summary (weight, net count, per-cable
 bundle diameter + recommended sleeve) to the console.
 
+- **Accessories & coverings** (`wv_accessories`, `--accessories`) — connectors
+  and cables declare contacts, seals, locks, boots, backshells, dust covers, and
+  coverings (braided sleeve, spiral wrap, tubing, corrugated tube, heatshrink,
+  tape). Quantities are stated or derived per pin / per connector / per length,
+  then rolled into an accessory BOM grouped by type + MPN.
+- **Importers** (`wv_import`, `--import wirelist|kicad`) — bootstrap a harness
+  from a from/to wire-list CSV (with header aliases; one cable per connector
+  pair) or a KiCad netlist (components → connectors, nets → wires).
+
 ## Still to come
 
 True three.js 3D view; a channel router guaranteeing zero wire overlap on dense
