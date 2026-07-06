@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from html import escape
 from typing import Dict, List, Optional, Tuple
 
+from wireviz.wv_colors import get_color_hex
+
 # millimetres per unit
 _UNIT_MM = {
     "mm": 1.0,
@@ -65,6 +67,8 @@ class FormboardConfig:
     bundle_width: float = 2.5  # mm stroke
     peg_radius: float = 3.0  # mm mounting-peg marker
     margin: float = 15.0  # mm drawing border
+    swatch: float = 2.8  # mm per per-run color swatch
+    legend_h: float = 54.0  # mm reserved band for the legend
 
     def page_wh(self) -> Tuple[float, float]:
         w, h = PAGE_SIZES.get(self.page, PAGE_SIZES["A3"])
@@ -146,6 +150,10 @@ def build_formboard(harness, cfg: Optional[FormboardConfig] = None) -> dict:
         else:
             x = prev_right + cfg.min_gap  # fallback if nothing feeds this column
             for f, t, length_mm in incoming.get(c, []):
+                if "x" not in conns[f]:
+                    # source not yet positioned (backward or same-column link,
+                    # e.g. a ground star or interface junction): skip its constraint
+                    continue
                 dy = abs(conns[t]["cy"] - conns[f]["cy"])
                 gap = max(cfg.min_gap, length_mm - dy)
                 x = max(x, conns[f]["x"] + cfg.connector_w + gap)
@@ -180,12 +188,21 @@ def build_formboard(harness, cfg: Optional[FormboardConfig] = None) -> dict:
                 "label": label,
                 "short": short,
                 "mid": (xm, (y0 + y1) / 2),
+                "colors": list(getattr(cable, "colors", []) or []),
+                "wirecount": cable.wirecount or len(getattr(cable, "colors", []) or []),
             }
         )
 
     width = prev_right + cfg.margin
-    height = max((c["y"] + c["h"] for c in conns.values()), default=cfg.margin) + cfg.margin
-    return {"connectors": conns, "bundles": bundles, "width": width, "height": height}
+    content_h = max((c["y"] + c["h"] for c in conns.values()), default=cfg.margin) + cfg.margin
+    height = content_h + cfg.legend_h
+    return {
+        "connectors": conns,
+        "bundles": bundles,
+        "width": width,
+        "height": height,
+        "content_h": content_h,
+    }
 
 
 def page_grid(layout: dict, cfg: Optional[FormboardConfig] = None) -> dict:
@@ -252,21 +269,108 @@ def _connector_svg(c, cfg) -> str:
     )
 
 
+def _code_hexes(code) -> List[str]:
+    try:
+        hx = get_color_hex(code)
+    except Exception:
+        hx = []
+    return hx or ["#cccccc"]
+
+
+def _swatch_svg(x, y, size, code) -> str:
+    """A small filled square for one conductor color (center band if striped)."""
+    hx = _code_hexes(code)
+    parts = [
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="{size:.1f}" height="{size:.1f}" '
+        f'fill="{hx[0]}" stroke="#555" stroke-width="0.3"/>'
+    ]
+    if len(hx) > 1:  # striped code: draw the stripe color as a center band
+        parts.append(
+            f'<rect x="{x:.1f}" y="{y + size / 3:.1f}" width="{size:.1f}" '
+            f'height="{size / 3:.1f}" fill="{hx[1]}"/>'
+        )
+    return "".join(parts)
+
+
 def _bundle_svg(b, cfg) -> str:
     pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in b["points"])
-    color = "#b00" if b["short"] else "#333"
+    colors = b.get("colors") or []
+    single = b.get("wirecount", len(colors)) == 1 and bool(colors)
+    line = _code_hexes(colors[0])[0] if single else "#333"
+    dash = ' stroke-dasharray="4 2"' if b["short"] else ""
     mx, my = b["mid"]
-    warn = " ⚠ SHORT" if b["short"] else ""
+    # single-conductor lines get a gray casing so pale colors stay visible on white
+    casing = (
+        f'<polyline points="{pts}" fill="none" stroke="#888" '
+        f'stroke-width="{cfg.bundle_width + 0.9:.1f}" stroke-linejoin="round" '
+        f'stroke-linecap="round"/>'
+        if single
+        else ""
+    )
+    # per-run color swatches, centered under the label
+    n = len(colors)
+    sw = cfg.swatch
+    sx = mx - (n * (sw + 0.6) - 0.6) / 2
+    swatches = "".join(
+        _swatch_svg(sx + i * (sw + 0.6), my + 1.5, sw, c) for i, c in enumerate(colors)
+    )
+    short_tag = '<tspan fill="#b00" font-weight="bold"> ⚠ SHORT</tspan>' if b["short"] else ""
     return (
         f'<g class="fb-bundle">'
-        f'<polyline points="{pts}" fill="none" stroke="{color}" '
+        f"{casing}"
+        f'<polyline points="{pts}" fill="none" stroke="{line}" '
         f'stroke-width="{cfg.bundle_width}" stroke-linejoin="round" '
-        f'stroke-linecap="round"/>'
+        f'stroke-linecap="round"{dash}/>'
         f'<text x="{mx:.1f}" y="{my - 2:.1f}" font-size="4.5" '
-        f'text-anchor="middle" font-family="sans-serif" fill="{color}">'
-        f'{escape(b["label"] + warn)}</text>'
+        f'text-anchor="middle" font-family="sans-serif" fill="#333">'
+        f'{escape(b["label"])}{short_tag}</text>'
+        f"{swatches}"
         f"</g>"
     )
+
+
+def _legend_svg(x, y, cfg) -> str:
+    fs, lh = 5, 8.5
+    p = [
+        '<g class="fb-legend">',
+        f'<rect x="{x:.1f}" y="{y:.1f}" width="168" height="{cfg.legend_h - 6:.1f}" '
+        f'rx="2" fill="#fff" stroke="#111" stroke-width="0.5"/>',
+        f'<text x="{x + 4:.1f}" y="{y + 8:.1f}" font-size="6" font-weight="bold" '
+        f'font-family="sans-serif" fill="#111">FORMBOARD LEGEND</text>',
+    ]
+    ry = y + 8 + lh
+    p.append(
+        f'<polyline points="{x + 4:.1f},{ry - 1.5:.1f} {x + 22:.1f},{ry - 1.5:.1f}" '
+        f'fill="none" stroke="#333" stroke-width="{cfg.bundle_width}"/>'
+    )
+    p.append(
+        f'<text x="{x + 26:.1f}" y="{ry:.1f}" font-size="{fs}" font-family="sans-serif" '
+        f'fill="#333">solid line = drawn at true 1:1 length (measure off the board)</text>'
+    )
+    ry += lh
+    p.append(
+        f'<polyline points="{x + 4:.1f},{ry - 1.5:.1f} {x + 22:.1f},{ry - 1.5:.1f}" '
+        f'fill="none" stroke="#333" stroke-width="{cfg.bundle_width}" stroke-dasharray="4 2"/>'
+    )
+    p.append(
+        f'<text x="{x + 26:.1f}" y="{ry:.1f}" font-size="{fs}" font-family="sans-serif" '
+        f'fill="#333">dashed + <tspan fill="#b00" font-weight="bold">SHORT</tspan> = '
+        f"not to scale; use the cut-sheet length</text>"
+    )
+    ry += lh
+    p.append(
+        f'<text x="{x + 4:.1f}" y="{ry:.1f}" font-size="{fs}" font-family="sans-serif" '
+        f'fill="#333">line color = single conductor\'s wire color; gray = multi-wire bundle</text>'
+    )
+    ry += lh
+    for i, c in enumerate(["RD", "BK", "BU"]):
+        p.append(_swatch_svg(x + 4 + i * (cfg.swatch + 0.6), ry - cfg.swatch + 0.5, cfg.swatch, c))
+    p.append(
+        f'<text x="{x + 4 + 3 * (cfg.swatch + 0.6) + 3:.1f}" y="{ry:.1f}" font-size="{fs}" '
+        f'font-family="sans-serif" fill="#333">swatches under each run = its conductor colors</text>'
+    )
+    p.append("</g>")
+    return "".join(p)
 
 
 def render_formboard(harness, cfg: Optional[FormboardConfig] = None) -> str:
@@ -288,6 +392,7 @@ def render_formboard(harness, cfg: Optional[FormboardConfig] = None) -> str:
         '<g class="fb-connectors">',
         *[_connector_svg(c, cfg) for c in layout["connectors"].values()],
         "</g>",
+        _legend_svg(cfg.margin, layout["content_h"], cfg),
         f'<text x="2" y="{h - 2:.1f}" font-size="4" fill="#888" '
         f'font-family="sans-serif">1:1 formboard · {grid["cols"]}×'
         f'{grid["rows"]} {cfg.page} sheet(s) · print at 100%</text>',

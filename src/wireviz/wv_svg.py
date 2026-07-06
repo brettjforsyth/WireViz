@@ -467,10 +467,13 @@ def job_meta(job):
 
 
 def _svg_grid(width, height, cfg: GridConfig) -> str:
+    # solid white backing so the SVG is not transparent (renders white everywhere)
+    bg = f'<rect width="{width}" height="{height}" fill="white"/>'
     if not cfg.show_grid:
-        return ""
+        return bg
     return (
-        f'<defs><pattern id="grid" width="{cfg.pitch}" height="{cfg.pitch}" '
+        bg
+        + f'<defs><pattern id="grid" width="{cfg.pitch}" height="{cfg.pitch}" '
         f'patternUnits="userSpaceOnUse">'
         f'<path d="M {cfg.pitch} 0 L 0 0 0 {cfg.pitch}" fill="none" '
         f'stroke="#e8e8e8" stroke-width="0.5"/></pattern></defs>'
