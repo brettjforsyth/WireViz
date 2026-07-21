@@ -34,7 +34,7 @@ class GridConfig:
 
     pitch: int = 10  # the snap grid
     pin_pitch: int = 30  # vertical spacing between pins/wires in a node
-    header: int = 30  # node title bar height
+    header: int = 44  # node title bar height (designator + type line)
     node_width: int = 120
     col_gap: int = 120  # horizontal gap between columns
     node_gap: int = 40  # vertical gap between stacked nodes in a column
@@ -166,6 +166,16 @@ def build_layout(
             x = cfg.snap(col_x)
             y = cfg.snap(y)
             kind = "connector" if name in harness.connectors else "cable"
+            src = (
+                harness.connectors.get(name)
+                if kind == "connector"
+                else harness.cables.get(name)
+            )
+            title = (str(getattr(src, "type", "") or "").strip().splitlines() or [""])[0] if src is not None else ""
+            if not title and kind == "cable" and src is not None:
+                title = str(getattr(src, "gauge", "") or "")
+            if len(title) > 30:
+                title = title[:29] + "…"
             pin_rows = []
             for i, (pid, label) in enumerate(pins):
                 py = cfg.snap(
@@ -181,6 +191,7 @@ def build_layout(
                 "h": cfg.snap(height),
                 "column": col,
                 "pins": pin_rows,
+                "title": title,
             }
             if image:
                 node["image"] = {
@@ -490,10 +501,16 @@ def _node_svg(node: dict, cfg: GridConfig) -> str:
         f'fill="{fill}" stroke="#333" stroke-width="1"/>',
         f'<rect x="{x}" y="{y}" width="{w}" height="{cfg.header}" rx="4" '
         f'fill="#333"/>',
-        f'<text x="{x + w / 2:.0f}" y="{y + cfg.header - 9}" fill="#fff" '
+        f'<text x="{x + w / 2:.0f}" y="{y + 18}" fill="#fff" '
         f'font-size="13" font-family="sans-serif" text-anchor="middle">'
         f"{escape(str(node['name']))}</text>",
     ]
+    if node.get("title"):
+        parts.append(
+            f'<text x="{x + w / 2:.0f}" y="{y + cfg.header - 10}" fill="#c9d4e8" '
+            f'font-size="9" font-family="sans-serif" text-anchor="middle">'
+            f"{escape(str(node['title']))}</text>"
+        )
     for row in node["pins"]:
         py = row["y"]
         label = f"{row['id']}"
