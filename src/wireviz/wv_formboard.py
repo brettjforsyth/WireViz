@@ -303,6 +303,11 @@ def _bundle_svg(b, cfg, idx: int = 0) -> str:
     n = len(colors)
     pitch = 1.1
     parts = [f'<g class="node cable fb-bundle" data-node="{escape(b["cable"])}">']
+    cpts = " ".join(f"{x:.1f},{y:.1f}" for x, y in b["points"])
+    parts.append(
+        f'<polyline points="{cpts}" class="fb-path" data-wire="{escape(b["cable"])}:*" '
+        f'fill="none" stroke="#333" stroke-width="{cfg.bundle_width}" '
+        f'stroke-linejoin="round" stroke-linecap="round"/>')
     for i, code in enumerate(colors):
         off = (i - (n - 1) / 2) * pitch
         pts = (f"{x0:.1f},{y0 + off:.1f} {xm + off:.1f},{y0 + off:.1f} "
@@ -386,6 +391,7 @@ def render_formboard(harness, cfg: Optional[FormboardConfig] = None) -> str:
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{w:.1f}mm" height="{h:.1f}mm" viewBox="0 0 {w:.1f} {h:.1f}">',
         f'<rect width="{w:.1f}" height="{h:.1f}" fill="#fff"/>',
+        '<style>.fb-path{display:none}</style>',
         '<g class="fb-pages">',
         _page_overlay(layout, grid, cfg),
         "</g>",
