@@ -255,7 +255,7 @@ def _page_overlay(layout, grid, cfg) -> str:
 def _connector_svg(c, cfg) -> str:
     x, y, w, h = c["x"], c["y"], cfg.connector_w, c["h"]
     return (
-        f'<g class="fb-connector">'
+        f'<g class="node connector fb-connector" data-node="{escape(str(c["name"]))}">'
         f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="1.5" '
         f'fill="#fff" stroke="#111" stroke-width="0.6"/>'
         # mounting peg at the connector centre
@@ -316,9 +316,9 @@ def _bundle_svg(b, cfg) -> str:
     )
     short_tag = '<tspan fill="#b00" font-weight="bold"> ⚠ SHORT</tspan>' if b["short"] else ""
     return (
-        f'<g class="fb-bundle">'
+        f'<g class="node cable fb-bundle" data-node="{escape(b["cable"])}">'
         f"{casing}"
-        f'<polyline points="{pts}" fill="none" stroke="{line}" '
+        f'<polyline points="{pts}" data-wire="{escape(b["cable"])}:*" fill="none" stroke="{line}" '
         f'stroke-width="{cfg.bundle_width}" stroke-linejoin="round" '
         f'stroke-linecap="round"{dash}/>'
         f'<text x="{mx:.1f}" y="{my - 2:.1f}" font-size="4.5" '
