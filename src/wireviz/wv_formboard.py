@@ -292,41 +292,44 @@ def _swatch_svg(x, y, size, code) -> str:
     return "".join(parts)
 
 
-def _bundle_svg(b, cfg) -> str:
-    pts = " ".join(f"{x:.1f},{y:.1f}" for x, y in b["points"])
-    colors = b.get("colors") or []
-    single = b.get("wirecount", len(colors)) == 1 and bool(colors)
-    line = _code_hexes(colors[0])[0] if single else "#333"
-    dash = ' stroke-dasharray="4 2"' if b["short"] else ""
-    mx, my = b["mid"]
-    # single-conductor lines get a gray casing so pale colors stay visible on white
-    casing = (
-        f'<polyline points="{pts}" fill="none" stroke="#888" '
-        f'stroke-width="{cfg.bundle_width + 0.9:.1f}" stroke-linejoin="round" '
-        f'stroke-linecap="round"/>'
-        if single
-        else ""
-    )
-    # per-run color swatches, centered under the label
+def _bundle_svg(b, cfg, idx: int = 0) -> str:
+    """Every conductor drawn as its own colored line (ribbon), grid-style:
+    per-strand data-wire marks, casing under pale colors, stripe overlay for
+    two-color codes. Length-infeasibility is flagged in amber on the label
+    (auto-column layouts stretch runs to the longest cable, so a flag here
+    usually means 'shorter than DRAWN', not 'cut list is wrong')."""
+    (x0, y0), (xm, _), (_, y1), (x1, _) = b["points"]
+    colors = b.get("colors") or ["BK"] * max(1, b.get("wirecount", 1) or 1)
     n = len(colors)
-    sw = cfg.swatch
-    sx = mx - (n * (sw + 0.6) - 0.6) / 2
-    swatches = "".join(
-        _swatch_svg(sx + i * (sw + 0.6), my + 1.5, sw, c) for i, c in enumerate(colors)
-    )
-    short_tag = '<tspan fill="#b00" font-weight="bold"> ⚠ SHORT</tspan>' if b["short"] else ""
-    return (
-        f'<g class="node cable fb-bundle" data-node="{escape(b["cable"])}">'
-        f"{casing}"
-        f'<polyline points="{pts}" data-wire="{escape(b["cable"])}:*" fill="none" stroke="{line}" '
-        f'stroke-width="{cfg.bundle_width}" stroke-linejoin="round" '
-        f'stroke-linecap="round"{dash}/>'
-        f'<text x="{mx:.1f}" y="{my - 2:.1f}" font-size="4.5" '
+    pitch = 1.1
+    parts = [f'<g class="node cable fb-bundle" data-node="{escape(b["cable"])}">']
+    for i, code in enumerate(colors):
+        off = (i - (n - 1) / 2) * pitch
+        pts = (f"{x0:.1f},{y0 + off:.1f} {xm + off:.1f},{y0 + off:.1f} "
+               f"{xm + off:.1f},{y1 + off:.1f} {x1:.1f},{y1 + off:.1f}")
+        hx = _code_hexes(code)
+        parts.append(
+            f'<polyline points="{pts}" fill="none" stroke="#8a8a8a" '
+            f'stroke-width="1.5" stroke-linejoin="round"/>')
+        parts.append(
+            f'<polyline points="{pts}" data-wire="{escape(b["cable"])}:{i + 1}" '
+            f'fill="none" stroke="{hx[0]}" stroke-width="0.9" '
+            f'stroke-linejoin="round"/>')
+        if len(hx) > 1:
+            parts.append(
+                f'<polyline points="{pts}" fill="none" stroke="{hx[1]}" '
+                f'stroke-width="0.9" stroke-dasharray="3 3" '
+                f'stroke-linejoin="round" pointer-events="none"/>')
+    mx, my = b["mid"]
+    ly = my - 2 - (n / 2) * pitch - (idx % 3) * 5.5
+    short_tag = ('<tspan fill="#B8860B"> len &lt; run as drawn</tspan>'
+                 if b["short"] else "")
+    parts.append(
+        f'<text x="{mx:.1f}" y="{ly:.1f}" font-size="4.5" '
         f'text-anchor="middle" font-family="sans-serif" fill="#333">'
-        f'{escape(b["label"])}{short_tag}</text>'
-        f"{swatches}"
-        f"</g>"
-    )
+        f'{escape(b["label"])}{short_tag}</text>')
+    parts.append("</g>")
+    return "".join(parts)
 
 
 def _legend_svg(x, y, cfg) -> str:
@@ -387,7 +390,7 @@ def render_formboard(harness, cfg: Optional[FormboardConfig] = None) -> str:
         _page_overlay(layout, grid, cfg),
         "</g>",
         '<g class="fb-bundles">',
-        *[_bundle_svg(b, cfg) for b in layout["bundles"]],
+        *[_bundle_svg(b, cfg, i) for i, b in enumerate(layout["bundles"])],
         "</g>",
         '<g class="fb-connectors">',
         *[_connector_svg(c, cfg) for c in layout["connectors"].values()],
