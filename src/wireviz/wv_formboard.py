@@ -135,6 +135,7 @@ def build_formboard(harness, cfg: Optional[FormboardConfig] = None) -> dict:
                 "cy": y + h / 2,
                 "pincount": len(conn.pins),
                 "col": c,
+                "type": str(getattr(conn, "type", "") or ""),
             }
             y += h + cfg.row_gap
 
@@ -262,11 +263,22 @@ def _connector_svg(c, cfg) -> str:
         f'<circle cx="{x + w / 2:.1f}" cy="{c["cy"]:.1f}" r="{cfg.peg_radius:.1f}" '
         f'fill="none" stroke="#111" stroke-width="0.5"/>'
         f'<circle cx="{x + w / 2:.1f}" cy="{c["cy"]:.1f}" r="0.7" fill="#111"/>'
-        f'<text x="{x + w / 2:.1f}" y="{y - 2:.1f}" font-size="5" '
-        f'text-anchor="middle" font-family="sans-serif" fill="#111">'
-        f'{escape(str(c["name"]))} ({c["pincount"]}p)</text>'
+        f'<text x="{x + w / 2:.1f}" y="{y - 8:.1f}" font-size="5" '
+        f'font-weight="bold" text-anchor="middle" font-family="sans-serif" '
+        f'fill="#111">{escape(_short_name(c))}</text>'
+        f'<text x="{x + w / 2:.1f}" y="{y - 2:.1f}" font-size="3.8" '
+        f'text-anchor="middle" font-family="sans-serif" fill="#666">'
+        f'{escape(str(c["name"]))} · {c["pincount"]}p</text>'
         f"</g>"
     )
+
+
+def _short_name(c) -> str:
+    """Human name for the card header: the type text up to the first
+    qualifier, falling back to the node code when the model has no type."""
+    import re as _re
+    t = _re.split(r"[(,;\u2014-]", c.get("type") or "")[0].strip()
+    return (t[:26] + "…") if len(t) > 27 else (t or str(c["name"]))
 
 
 def _code_hexes(code) -> List[str]:
