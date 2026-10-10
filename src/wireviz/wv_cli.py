@@ -160,6 +160,14 @@ epilog += ", ".join([f"{key} ({value.upper()})" for key, value in format_codes.i
     "(<name>.formboard.svg).",
 )
 @click.option(
+    "--carview",
+    "carview",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Draw the harness on a vehicle picture using this layout YAML "
+    "(connector positions and trunk routes in mm); writes <name>.carview.html.",
+)
+@click.option(
     "--dxf", is_flag=True, default=False,
     help="Write the formboard as DXF for CAD (<name>.formboard.dxf).",
 )
@@ -296,6 +304,7 @@ def wireviz(
     viewer3d,
     json_out,
     formboard,
+    carview,
     dxf,
     netlist,
     accessories_out,
@@ -509,6 +518,14 @@ def wireviz(
                 f"Formboard:    {out}  ({grid['cols']}×{grid['rows']} "
                 f"{formboard} sheets)"
             )
+
+        # Harness drawn on a vehicle picture
+        if carview:
+            from wireviz.wv_carview import build_carview, carview_summary, load_layout, render_carview
+            out = output_base.with_suffix(".carview.html")
+            out.write_text(render_carview(harness, carview))
+            print(f"Car view:     {out}  "
+                  f"({carview_summary(build_carview(harness, load_layout(carview)))})")
 
         # Formboard DXF for CAD
         if dxf:
